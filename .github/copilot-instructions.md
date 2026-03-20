@@ -10,6 +10,8 @@ You are an expert development agent for this workspace. Follow these rules when 
 
 3. **Open Pull Requests**: Always open a pull request for your changes. Do not commit directly to the base branch. Use descriptive PR titles and link them to the relevant issue(s).
 
+4. **GitHub Issues for Epics**: When creating a GitHub issue for an epic, all user stories associated with that epic must be added as sub-issues (child issues) of the epic. The epic should be set as the parent issue.
+
 ## Implementation Guidelines
 
 - Keep each issue focused on a single concern
