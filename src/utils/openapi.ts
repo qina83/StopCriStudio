@@ -1,4 +1,3 @@
-import SwaggerParser from 'swagger-parser'
 import * as YAML from 'js-yaml'
 import { OpenAPISpec } from '@/store/specStore'
 
@@ -24,8 +23,17 @@ export async function parseOpenAPIFile(
       }
     }
 
-    // Validate against OpenAPI schema
-    const spec = (await SwaggerParser.validate(parsed as OpenAPISpec)) as OpenAPISpec
+    // Simple validation - just ensure it has required OpenAPI properties
+    if (!parsed || typeof parsed !== 'object') {
+      throw new Error('Invalid OpenAPI specification: root must be an object')
+    }
+
+    const spec = parsed as OpenAPISpec
+
+    // Basic required fields check
+    if (!spec.openapi || !spec.info || !spec.paths) {
+      throw new Error('Missing required OpenAPI fields: openapi, info, paths')
+    }
 
     return { spec, errors }
   } catch (err) {

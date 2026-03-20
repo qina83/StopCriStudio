@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test'
 
 test.describe('OpenAPI Visual Editor', () => {
   test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => localStorage.clear())
     await page.goto('/')
   })
 
