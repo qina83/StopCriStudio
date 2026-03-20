@@ -14,4 +14,5 @@ Your goal is to generate a Playwright test based on the provided scenario after 
 - DO run steps one by one using the tools provided by the Playwright MCP.
 - Only after all steps are completed, emit a Playwright TypeScript test that uses `@playwright/test` based on message history
 - Save generated test file in the tests directory
+- Tests run on **Chromium only** (configured in `playwright.config.ts`)
 - Execute the test file and iterate until the test passes
