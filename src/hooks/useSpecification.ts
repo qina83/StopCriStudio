@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
-import { OpenAPISpecification } from '../types'
+import { OpenAPISpecification, PathOperation, HTTPMethod } from '../types'
 import { saveSpecification } from '../services/storageService'
 
 const AUTOSAVE_DELAY = 1000 // 1 second
@@ -62,10 +62,96 @@ export function useSpecification(initialSpec: OpenAPISpecification) {
     [updateSpecification]
   )
 
+  const addPath = useCallback(
+    (pathName: string) => {
+      updateSpecification((spec) => {
+        const paths = (spec.content.paths as Record<string, unknown>) || {}
+        
+        // Don't add if path already exists
+        if (paths[pathName]) {
+          return spec
+        }
+
+        return {
+          ...spec,
+          content: {
+            ...spec.content,
+            paths: {
+              ...paths,
+              [pathName]: {},
+            },
+          },
+          updatedAt: Date.now(),
+        }
+      })
+    },
+    [updateSpecification]
+  )
+
+  const addOperation = useCallback(
+    (pathName: string, method: HTTPMethod, operation: Partial<PathOperation> = {}) => {
+      updateSpecification((spec) => {
+        const paths = (spec.content.paths as Record<string, any>) || {}
+        const pathObj = paths[pathName] || {}
+
+        return {
+          ...spec,
+          content: {
+            ...spec.content,
+            paths: {
+              ...paths,
+              [pathName]: {
+                ...pathObj,
+                [method.toLowerCase()]: {
+                  description: operation.description || '',
+                  summary: operation.summary || `${method} operation`,
+                  tags: operation.tags || [],
+                  responses: operation.responses || {
+                    '200': {
+                      description: 'Successful response',
+                    },
+                  },
+                } as PathOperation,
+              },
+            },
+          },
+          updatedAt: Date.now(),
+        }
+      })
+    },
+    [updateSpecification]
+  )
+
+  const getPathOperations = useCallback(
+    (pathName: string): Record<string, PathOperation> => {
+      const paths = (specification.content.paths as Record<string, any>) || {}
+      const pathObj = paths[pathName] || {}
+      
+      // Filter out non-HTTP method keys
+      const httpMethods = ['get', 'post', 'put', 'delete', 'patch', 'head', 'options']
+      return Object.entries(pathObj)
+        .filter(([key]) => httpMethods.includes(key))
+        .reduce((acc, [key, value]) => {
+          acc[key.toUpperCase()] = value as PathOperation
+          return acc
+        }, {} as Record<string, PathOperation>)
+    },
+    [specification]
+  )
+
+  const getPaths = useCallback((): string[] => {
+    const paths = (specification.content.paths as Record<string, unknown>) || {}
+    return Object.keys(paths)
+  }, [specification])
+
   return {
     specification,
     updateSpecification,
     updateInfo,
+    addPath,
+    addOperation,
+    getPathOperations,
+    getPaths,
     isDirty,
     isSaving,
   }

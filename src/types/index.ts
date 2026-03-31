@@ -16,6 +16,31 @@ export interface SpecificationMetadata {
 }
 
 /**
+ * HTTP method types for operations
+ */
+export type HTTPMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD' | 'OPTIONS'
+
+/**
+ * API Path Operation
+ */
+export interface PathOperation {
+  description?: string
+  summary?: string
+  tags?: string[]
+  parameters?: unknown[]
+  requestBody?: unknown
+  responses?: Record<string, unknown>
+}
+
+/**
+ * API Path with operations
+ */
+export interface APIPath {
+  pathName: string
+  operations: Record<HTTPMethod, PathOperation | undefined>
+}
+
+/**
  * OpenAPI Specification structure (minimal)
  */
 export interface OpenAPISpecification extends SpecificationMetadata {

@@ -195,6 +195,4 @@ User stories are documented separately in the [UserStories/](./UserStories/) fol
 
 - [WP-001: First-time user sees Welcome page](./UserStories/WP-001.md)
 - [WP-002: User creates new OpenAPI specification](./UserStories/WP-002.md)
-- [WP-003: User loads existing specification](./UserStories/WP-003.md)
-- [WP-009: Welcome page displays correctly on desktop](./UserStories/WP-009.md)
-- [WP-010: Application provides visual feedback for user interactions](./UserStories/WP-010.md)
+- [WP-003: User defines API paths and operations](./UserStories/WP-003.md)

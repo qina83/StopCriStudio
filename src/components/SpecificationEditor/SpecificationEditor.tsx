@@ -20,12 +20,7 @@ interface SpecificationEditorProps {
 
 export function SpecificationEditor({ specification, onBack }: SpecificationEditorProps) {
   const [activeItem, setActiveItem] = useState<NavigationItem>('info')
-  const { specification: spec, updateInfo, isSaving } = useSpecification(specification)
-
-  const handleAddPath = () => {
-    // TODO: Implement add path dialog
-    console.log('Add path')
-  }
+  const { specification: spec, updateInfo, updateSpecification, isSaving } = useSpecification(specification)
 
   const handleAddSchema = () => {
     // TODO: Implement add schema dialog
@@ -37,7 +32,7 @@ export function SpecificationEditor({ specification, onBack }: SpecificationEdit
       case 'info':
         return <InfoPanel specification={spec} onUpdate={updateInfo} isSaving={isSaving} />
       case 'paths':
-        return <PathsPanel specification={spec} onAddPath={handleAddPath} />
+        return <PathsPanel specification={spec} onUpdateSpecification={updateSpecification} />
       case 'schemas':
         return <SchemasPanel specification={spec} onAddSchema={handleAddSchema} />
       default:
@@ -83,8 +78,7 @@ export function SpecificationEditor({ specification, onBack }: SpecificationEdit
         <Sidebar
           activeItem={activeItem}
           onNavigate={setActiveItem}
-          onAddPath={handleAddPath}
-          onAddSchema={handleAddSchema}
+          specification={spec}
         />
 
         {/* Content panel */}
