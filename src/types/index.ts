@@ -1,7 +1,7 @@
 /**
- * OpenAPI version types
+ * OpenAPI version types - fixed at 3.0 for this editor
  */
-export type OpenAPIVersion = '3.0' | '3.1'
+export type OpenAPIVersion = '3.0.0'
 
 /**
  * Specification metadata
@@ -9,7 +9,7 @@ export type OpenAPIVersion = '3.0' | '3.1'
 export interface SpecificationMetadata {
   id: string
   name: string
-  version: OpenAPIVersion
+  specVersion: string // e.g., '1.0.0' - the API/specification version
   createdAt: number
   updatedAt: number
   description?: string
@@ -19,6 +19,7 @@ export interface SpecificationMetadata {
  * OpenAPI Specification structure (minimal)
  */
 export interface OpenAPISpecification extends SpecificationMetadata {
+  openAPIVersion: OpenAPIVersion // Fixed at 3.0.0
   content: Record<string, unknown> // Full OpenAPI spec content
 }
 

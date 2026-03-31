@@ -86,6 +86,14 @@ The Welcome page serves as the entry point to the application, allowing users to
 - Storage quota warnings are displayed if nearing browser limits
 - Export functionality allows users to download specifications as JSON files
 
+### 4.5 Autosave functionality (Priority: High)
+
+- All specification changes are automatically saved to local storage
+- No manual save button is required
+- Changes are persisted immediately as user edits
+- Users do not need to worry about losing work due to accidental page closure
+- Autosave operates silently without disrupting user workflow
+
 ## 5. User experience
 
 ### 5.1 Entry points & first-time user flow
@@ -183,60 +191,10 @@ When a technical user first opens Stop Cri Studio, they're greeted with a welcom
 
 ## 10. User stories
 
-### 10.1 First-time user sees Welcome page
+User stories are documented separately in the [UserStories/](./UserStories/) folder:
 
-- **ID**: WP-001
-- **Description**: As a first-time user, I want to see a clear welcome screen when I open the application, so I understand what Stop Cri Studio is and what I can do with it.
-- **Acceptance criteria**:
-  - Welcome page loads automatically on application initialization
-  - Application title "Stop Cri Studio" is prominently displayed
-  - Welcome text clearly explains the purpose of the application
-  - Two primary action buttons are visible and clearly labeled
-  - Page displays correctly on both desktop and tablet viewports
-
-### 10.2 User creates new OpenAPI specification
-
-- **ID**: WP-002
-- **Description**: As a technical user, I want to create a new OpenAPI specification by clicking a "Create" button, so I can start documenting my API from scratch.
-- **Acceptance criteria**:
-  - "Create" button is clearly visible on Welcome page
-  - Clicking "Create" initiates workflow to select OpenAPI version (3.0 or 3.1)
-  - User can select their preferred OpenAPI version
-  - New specification is created with default/minimal required fields
-  - User is directed to specification editor (future functionality)
-  - Create action does not interfere with existing specifications in local storage
-
-### 10.3 User loads existing specification
-
-- **ID**: WP-003
-- **Description**: As a returning user, I want to click "Load" to see my previously saved specifications, so I can continue editing work in progress.
-- **Acceptance criteria**:
-  - "Load" button is clearly visible on Welcome page
-  - Clicking "Load" displays list of saved specifications from local storage
-  - Each specification shows: name, OpenAPI version, and last modified date
-  - User can select a specification to open for editing
-  - If no specifications exist, user sees helpful message suggesting to create one
-  - List updates in real-time if new specifications are added
-
-### 10.4 Welcome page displays correctly on desktop
-
-- **ID**: WP-009
-- **Description**: As a desktop user, I want the Welcome page to display properly on my desktop browser so I can work comfortably.
-- **Acceptance criteria**:
-  - Welcome page is fully functional on desktop browsers (Chrome, Firefox, Safari, Edge)
-  - Buttons are easily clickable with mouse interaction
-  - Text is legible on standard desktop viewports (1024px and larger)
-  - No visual glitches or layout issues on desktop screens
-  - All interactive elements work smoothly with mouse and keyboard navigation
-
-### 10.5 Application provides visual feedback for user interactions
-
-- **ID**: WP-010
-- **Description**: As a user, I want visual feedback (like hover states and loading indicators) when I interact with the Welcome page, so I know my actions are being registered.
-- **Acceptance criteria**:
-  - Buttons show clear hover/focus states on desktop
-  - Buttons show active/pressed state when clicked
-  - Loading indicator appears while specifications are being fetched from storage
-  - Toast/notification messages confirm successful actions (e.g., deletion, import)
-  - Color contrast meets WCAG AA standards for accessibility
-  - Keyboard navigation is fully supported (Tab, Enter keys)
+- [WP-001: First-time user sees Welcome page](./UserStories/WP-001.md)
+- [WP-002: User creates new OpenAPI specification](./UserStories/WP-002.md)
+- [WP-003: User loads existing specification](./UserStories/WP-003.md)
+- [WP-009: Welcome page displays correctly on desktop](./UserStories/WP-009.md)
+- [WP-010: Application provides visual feedback for user interactions](./UserStories/WP-010.md)

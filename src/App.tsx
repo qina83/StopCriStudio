@@ -1,14 +1,31 @@
-import React from 'react'
+import React, { useState } from 'react'
+import { OpenAPISpecification } from './types'
+import { SpecificationEditor } from './components/SpecificationEditor/SpecificationEditor'
+import { createNewSpecification } from './services/storageService'
 
 /**
- * Welcome page implements WP-001: First-time user sees Welcome page
- * Displays two main action buttons: Create and Load
- * With responsive design for desktop and tablet
+ * App Component
+ * Main application entry point implementing WP-001 and WP-002
  */
 function App() {
-  // TODO: Implement create/load modal state
-  // const [showCreate, setShowCreate] = useState(false)
-  // const [showLoad, setShowLoad] = useState(false)
+  const [currentView, setCurrentView] = useState<'welcome' | 'editor'>('welcome')
+  const [currentSpecification, setCurrentSpecification] = useState<OpenAPISpecification | null>(null)
+
+  const handleCreateNew = () => {
+    // Create a new specification
+    const newSpec = createNewSpecification('Untitled API')
+    setCurrentSpecification(newSpec)
+    setCurrentView('editor')
+  }
+
+  const handleBackToWelcome = () => {
+    setCurrentView('welcome')
+    setCurrentSpecification(null)
+  }
+
+  if (currentView === 'editor' && currentSpecification) {
+    return <SpecificationEditor specification={currentSpecification} onBack={handleBackToWelcome} />
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
@@ -25,12 +42,9 @@ function App() {
       {/* Main content with two action buttons */}
       <main className="flex justify-center items-center min-h-[calc(100vh-280px)] px-4 pb-12">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-2xl">
-          {/* Create new specification button */}
+          {/* Create new specification button - WP-002 */}
           <button
-            onClick={() => {
-              // TODO: Show create modal (WP-002)
-              console.log('Create new specification')
-            }}
+            onClick={handleCreateNew}
             className="group p-8 bg-white rounded-lg shadow-lg hover:shadow-2xl transition-all duration-200 transform hover:-translate-y-1 focus:outline-none focus:ring-4 focus:ring-blue-500 focus:ring-opacity-50"
             aria-label="Create a new OpenAPI specification"
           >
@@ -41,7 +55,7 @@ function App() {
             </p>
           </button>
 
-          {/* Load existing specification button */}
+          {/* Load existing specification button - WP-003 */}
           <button
             onClick={() => {
               // TODO: Show load modal (WP-003)
