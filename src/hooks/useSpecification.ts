@@ -144,12 +144,60 @@ export function useSpecification(initialSpec: OpenAPISpecification) {
     return Object.keys(paths)
   }, [specification])
 
+  const deleteOperation = useCallback(
+    (pathName: string, method: HTTPMethod) => {
+      updateSpecification((spec) => {
+        const paths = (spec.content.paths as Record<string, any>) || {}
+        const pathObj = paths[pathName] || {}
+
+        // Create a new path object without the operation
+        const updatedPathObj = { ...pathObj }
+        delete updatedPathObj[method.toLowerCase()]
+
+        return {
+          ...spec,
+          content: {
+            ...spec.content,
+            paths: {
+              ...paths,
+              [pathName]: updatedPathObj,
+            },
+          },
+          updatedAt: Date.now(),
+        }
+      })
+    },
+    [updateSpecification]
+  )
+
+  const deletePath = useCallback(
+    (pathName: string) => {
+      updateSpecification((spec) => {
+        const paths = (spec.content.paths as Record<string, any>) || {}
+        const updatedPaths = { ...paths }
+        delete updatedPaths[pathName]
+
+        return {
+          ...spec,
+          content: {
+            ...spec.content,
+            paths: updatedPaths,
+          },
+          updatedAt: Date.now(),
+        }
+      })
+    },
+    [updateSpecification]
+  )
+
   return {
     specification,
     updateSpecification,
     updateInfo,
     addPath,
     addOperation,
+    deleteOperation,
+    deletePath,
     getPathOperations,
     getPaths,
     isDirty,

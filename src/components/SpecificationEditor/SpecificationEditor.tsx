@@ -12,6 +12,7 @@ import { PathsPanel } from '../PathsPanel/PathsPanel'
 import { SchemasPanel } from '../SchemasPanel/SchemasPanel'
 
 type NavigationItem = 'info' | 'paths' | 'schemas'
+type PathViewMode = 'form' | 'list'
 
 interface SpecificationEditorProps {
   specification: OpenAPISpecification
@@ -20,6 +21,7 @@ interface SpecificationEditorProps {
 
 export function SpecificationEditor({ specification, onBack }: SpecificationEditorProps) {
   const [activeItem, setActiveItem] = useState<NavigationItem>('info')
+  const [pathViewMode, setPathViewMode] = useState<PathViewMode>('list') // WP-002.1
   const { specification: spec, updateInfo, updateSpecification, isSaving } = useSpecification(specification)
 
   const handleAddSchema = () => {
@@ -27,12 +29,33 @@ export function SpecificationEditor({ specification, onBack }: SpecificationEdit
     console.log('Add schema')
   }
 
+  // Handle navigation to paths - reset view mode to list when navigating to paths (WP-002.1)
+  const handleNavigate = (item: NavigationItem) => {
+    setActiveItem(item)
+    // When clicking on Paths, reset to list view (WP-002.1)
+    if (item === 'paths') {
+      setPathViewMode('list')
+    }
+  }
+
+  // Handle switching path view mode (WP-002.1)
+  const handlePathViewModeChange = (mode: PathViewMode) => {
+    setPathViewMode(mode)
+  }
+
   const renderContent = () => {
     switch (activeItem) {
       case 'info':
         return <InfoPanel specification={spec} onUpdate={updateInfo} isSaving={isSaving} />
       case 'paths':
-        return <PathsPanel specification={spec} onUpdateSpecification={updateSpecification} />
+        return (
+          <PathsPanel
+            specification={spec}
+            onUpdateSpecification={updateSpecification}
+            viewMode={pathViewMode}
+            onViewModeChange={handlePathViewModeChange}
+          />
+        )
       case 'schemas':
         return <SchemasPanel specification={spec} onAddSchema={handleAddSchema} />
       default:
@@ -77,7 +100,7 @@ export function SpecificationEditor({ specification, onBack }: SpecificationEdit
         {/* Sidebar */}
         <Sidebar
           activeItem={activeItem}
-          onNavigate={setActiveItem}
+          onNavigate={handleNavigate}
           specification={spec}
         />
 

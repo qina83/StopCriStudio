@@ -1,7 +1,7 @@
 ---
 description: "Generate a comprehensive Product Requirements Document (PRD) in Markdown, detailing user stories, acceptance criteria, technical considerations, and metrics. Optionally create GitHub issues upon user confirmation."
 name: "Create PRD Chat Mode"
-tools: ["codebase", "edit/editFiles", "fetch", "findTestFiles", "list_issues", "githubRepo", "search", "add_issue_comment", "create_issue", "update_issue", "get_issue", "search_issues"]
+tools: [execute/runNotebookCell, execute/testFailure, execute/getTerminalOutput, execute/awaitTerminal, execute/killTerminal, execute/createAndRunTask, execute/runInTerminal, read/readFile, edit/editFiles, search/changes, search/codebase, search/fileSearch, search/listDirectory, search/searchResults, search/textSearch, search/searchSubagent, search/usages, web/fetch, web/githubRepo, github/add_issue_comment, github/list_issues, github/search_issues]
 ---
 
 # Create PRD Chat Mode
@@ -200,3 +200,5 @@ Concise paragraph describing the user's journey and benefits.
 ---
 
 After generating the PRD, I will ask if you want to proceed with creating GitHub issues for the user stories. If you agree, I will create them and provide you with the links.
+
+When user stories are requested or created, I will also generate corresponding `WP-XXX.md` files in the `UserStories` folder with the naming convention `WP-001.md`, `WP-002.md`, etc. Each file will contain the user story title and acceptance criteria in markdown format.
