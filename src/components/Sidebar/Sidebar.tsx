@@ -8,6 +8,8 @@ import { OpenAPISpecification } from '../../types'
 
 type NavigationItem = 'info' | 'paths' | 'schemas'
 
+const HTTP_METHOD_ORDER = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
+
 interface SidebarProps {
   activeItem: NavigationItem
   onNavigate: (item: NavigationItem) => void
@@ -30,9 +32,12 @@ export function Sidebar({ activeItem, onNavigate, specification, selectedPath, o
   const getPathMethods = (pathName: string): string[] => {
     const pathObj = paths[pathName] || {}
     const httpMethods = ['get', 'post', 'put', 'delete', 'patch', 'head', 'options']
-    return Object.keys(pathObj)
+    const methods = Object.keys(pathObj)
       .filter((key) => httpMethods.includes(key))
       .map((key) => key.toUpperCase())
+    
+    // Sort methods according to HTTP_METHOD_ORDER
+    return methods.sort((a, b) => HTTP_METHOD_ORDER.indexOf(a) - HTTP_METHOD_ORDER.indexOf(b))
   }
 
   const getMethodColor = (method: string): string => {
