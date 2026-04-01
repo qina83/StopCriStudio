@@ -169,6 +169,8 @@ export function PathEditForm({
   const handleAddConfirm = () => {
     if (methodToAdd) {
       onAddOperation(methodToAdd)
+      // Auto-select the newly created operation
+      setSelectedOperation(methodToAdd)
       setShowAddConfirmModal(false)
       setMethodToAdd(null)
     }
