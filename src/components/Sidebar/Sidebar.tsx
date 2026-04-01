@@ -12,9 +12,11 @@ interface SidebarProps {
   activeItem: NavigationItem
   onNavigate: (item: NavigationItem) => void
   specification?: OpenAPISpecification
+  selectedPath?: string | null
+  onPathSelect?: (pathName: string) => void
 }
 
-export function Sidebar({ activeItem, onNavigate, specification }: SidebarProps) {
+export function Sidebar({ activeItem, onNavigate, specification, selectedPath, onPathSelect }: SidebarProps) {
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set())
 
   const paths = (specification?.content.paths as Record<string, any>) || {}
@@ -99,11 +101,20 @@ export function Sidebar({ activeItem, onNavigate, specification }: SidebarProps)
                 return (
                   <div key={pathName}>
                     <button
-                      onClick={() => togglePathExpansion(pathName)}
-                      className="w-full text-left px-3 py-2 rounded text-slate-300 hover:bg-slate-800 hover:text-white transition-colors text-sm font-mono flex items-center justify-between"
+                      onClick={() => {
+                        togglePathExpansion(pathName)
+                        onPathSelect?.(pathName)
+                      }}
+                      className={`w-full text-left px-3 py-2 rounded transition-colors text-sm font-mono flex items-center justify-between ${
+                        selectedPath === pathName
+                          ? 'bg-blue-600 text-white'
+                          : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                      }`}
                     >
                       <span>{isExpanded ? '▼' : '▶'} {pathName}</span>
-                      <span className="text-xs bg-slate-700 px-1.5 py-0.5 rounded">{methods.length}</span>
+                      <span className={`text-xs px-1.5 py-0.5 rounded ${
+                        selectedPath === pathName ? 'bg-blue-700' : 'bg-slate-700'
+                      }`}>{methods.length}</span>
                     </button>
 
                     {/* Operations under path */}

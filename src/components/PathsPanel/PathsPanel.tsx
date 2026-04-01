@@ -15,6 +15,8 @@ interface PathsPanelProps {
   onUpdateSpecification?: (updater: (spec: OpenAPISpecification) => OpenAPISpecification) => void
   viewMode?: 'form' | 'list'
   onViewModeChange?: (mode: 'form' | 'list') => void
+  selectedPath?: string | null
+  onSelectedPathChange?: (path: string | null) => void
 }
 
 type ViewMode = 'form' | 'list'
@@ -24,6 +26,8 @@ export function PathsPanel({
   onUpdateSpecification,
   viewMode: externalViewMode,
   onViewModeChange,
+  selectedPath: externalSelectedPath,
+  onSelectedPathChange,
 }: PathsPanelProps) {
   // View mode state - WP-002.1
   // Use external view mode if provided (controlled by parent), otherwise manage internally
@@ -36,17 +40,25 @@ export function PathsPanel({
     }
     onViewModeChange?.(mode)
   }
-  
+
   // Path creation state
   const [newPathName, setNewPathName] = useState('')
 
   // Path selection state - WP-002.2, WP-002.4
-  const [selectedPath, setSelectedPath] = useState<string | null>(null)
+  // Use external selected path if provided (controlled by parent), otherwise manage internally
+  const [internalSelectedPath, setInternalSelectedPath] = useState<string | null>(null)
+  const selectedPath = externalSelectedPath !== undefined ? externalSelectedPath : internalSelectedPath
+
+  const setSelectedPath = (path: string | null) => {
+    if (externalSelectedPath === undefined) {
+      setInternalSelectedPath(path)
+    }
+    onSelectedPathChange?.(path)
+  }
 
   const paths = (specification.content.paths as Record<string, any>) || {}
   const pathCount = Object.keys(paths).length
 
-  // Helpers
   const getPathOperations = (path: string): Record<string, PathOperation> => {
     const pathObj = paths[path] || {}
     const httpMethods = ['get', 'post', 'put', 'delete', 'patch', 'head', 'options']

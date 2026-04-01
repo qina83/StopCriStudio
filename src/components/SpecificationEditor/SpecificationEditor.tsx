@@ -22,6 +22,7 @@ interface SpecificationEditorProps {
 export function SpecificationEditor({ specification, onBack }: SpecificationEditorProps) {
   const [activeItem, setActiveItem] = useState<NavigationItem>('info')
   const [pathViewMode, setPathViewMode] = useState<PathViewMode>('list') // WP-002.1
+  const [selectedPath, setSelectedPath] = useState<string | null>(null) // Track selected path from sidebar
   const { specification: spec, updateInfo, updateSpecification, isSaving } = useSpecification(specification)
 
   const handleAddSchema = () => {
@@ -35,7 +36,16 @@ export function SpecificationEditor({ specification, onBack }: SpecificationEdit
     // When clicking on Paths, reset to list view (WP-002.1)
     if (item === 'paths') {
       setPathViewMode('list')
+    } else {
+      // Reset selected path when navigating away from paths
+      setSelectedPath(null)
     }
+  }
+
+  // Handle path selection from sidebar
+  const handlePathSelect = (pathName: string) => {
+    setSelectedPath(pathName)
+    setActiveItem('paths') // Navigate to paths panel
   }
 
   // Handle switching path view mode (WP-002.1)
@@ -54,6 +64,8 @@ export function SpecificationEditor({ specification, onBack }: SpecificationEdit
             onUpdateSpecification={updateSpecification}
             viewMode={pathViewMode}
             onViewModeChange={handlePathViewModeChange}
+            selectedPath={selectedPath}
+            onSelectedPathChange={setSelectedPath}
           />
         )
       case 'schemas':
@@ -102,6 +114,8 @@ export function SpecificationEditor({ specification, onBack }: SpecificationEdit
           activeItem={activeItem}
           onNavigate={handleNavigate}
           specification={spec}
+          selectedPath={selectedPath}
+          onPathSelect={handlePathSelect}
         />
 
         {/* Content panel */}
