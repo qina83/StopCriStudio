@@ -6,6 +6,7 @@
 import React, { useState } from 'react'
 import { OpenAPISpecification } from '../../types'
 import { useSpecification } from '../../hooks/useSpecification'
+import { exportSpecificationAsYAML } from '../../utils/exportService'
 import { Sidebar } from '../Sidebar/Sidebar'
 import { InfoPanel } from '../InfoPanel/InfoPanel'
 import { PathsPanel } from '../PathsPanel/PathsPanel'
@@ -23,11 +24,25 @@ export function SpecificationEditor({ specification, onBack }: SpecificationEdit
   const [activeItem, setActiveItem] = useState<NavigationItem>('info')
   const [pathViewMode, setPathViewMode] = useState<PathViewMode>('list') // WP-002.1
   const [selectedPath, setSelectedPath] = useState<string | null>(null) // Track selected path from sidebar
+  const [isExporting, setIsExporting] = useState(false)
   const { specification: spec, updateInfo, updateSpecification, isSaving } = useSpecification(specification)
 
   const handleAddSchema = () => {
     // TODO: Implement add schema dialog
     console.log('Add schema')
+  }
+
+  // Handle export specification as YAML (WP-004)
+  const handleExport = async () => {
+    setIsExporting(true)
+    try {
+      exportSpecificationAsYAML(spec)
+    } catch (error) {
+      console.error('Export failed:', error)
+      alert('Failed to export specification')
+    } finally {
+      setIsExporting(false)
+    }
   }
 
   // Handle navigation to paths - reset view mode to list when navigating to paths (WP-002.1)
@@ -97,6 +112,17 @@ export function SpecificationEditor({ specification, onBack }: SpecificationEdit
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {/* Export Button - WP-004 */}
+            <button
+              onClick={handleExport}
+              disabled={isExporting || isSaving}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white font-medium rounded-lg transition-colors focus:outline-none focus:ring-4 focus:ring-emerald-300"
+              title="Export specification as YAML"
+              aria-label="Export specification as YAML file"
+            >
+              {isExporting ? '⬇ Exporting...' : '⬇ Export'}
+            </button>
+
             {isSaving && (
               <div className="flex items-center gap-2 px-3 py-1 bg-blue-50 rounded-lg">
                 <span className="inline-block w-2 h-2 bg-blue-600 rounded-full animate-pulse"></span>

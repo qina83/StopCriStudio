@@ -84,9 +84,17 @@ The Welcome page serves as the entry point to the application, allowing users to
 
 - Specifications are persisted to browser local storage
 - Storage quota warnings are displayed if nearing browser limits
-- Export functionality allows users to download specifications as JSON files
 
-### 4.5 Autosave functionality (Priority: High)
+### 4.5 YAML export (Priority: High)
+
+- Export button is displayed in the header, top right corner
+- Users can click Export to download their specification as a YAML file
+- Downloaded file is named using the specification name defined in the info panel
+- If specification name is empty, filename defaults to "openapi.yaml"
+- YAML export contains the complete specification without validation
+- Export functionality works from any editor screen
+
+### 4.6 Autosave functionality (Priority: High)
 
 - All specification changes are automatically saved to local storage
 - No manual save button is required
@@ -196,3 +204,4 @@ User stories are documented separately in the [UserStories/](./UserStories/) fol
 - [WP-001: First-time user sees Welcome page](./UserStories/WP-001.md)
 - [WP-002: User creates new OpenAPI specification](./UserStories/WP-002.md)
 - [WP-003: User defines API paths and operations](./UserStories/WP-003.md)
+- [WP-004: User exports specification as YAML](./UserStories/WP-004.md)
