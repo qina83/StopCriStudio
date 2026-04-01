@@ -21,14 +21,10 @@ export function Sidebar({ activeItem, onNavigate, specification, selectedPath, o
 
   const paths = (specification?.content.paths as Record<string, any>) || {}
 
-  const togglePathExpansion = (pathName: string) => {
-    const newExpanded = new Set(expandedPaths)
-    if (newExpanded.has(pathName)) {
-      newExpanded.delete(pathName)
-    } else {
-      newExpanded.add(pathName)
-    }
-    setExpandedPaths(newExpanded)
+  const handlePathSelect = (pathName: string) => {
+    // When a path is selected, expand only that path and close others
+    setExpandedPaths(new Set([pathName]))
+    onPathSelect?.(pathName)
   }
 
   const getPathMethods = (pathName: string): string[] => {
@@ -101,10 +97,7 @@ export function Sidebar({ activeItem, onNavigate, specification, selectedPath, o
                 return (
                   <div key={pathName}>
                     <button
-                      onClick={() => {
-                        togglePathExpansion(pathName)
-                        onPathSelect?.(pathName)
-                      }}
+                      onClick={() => handlePathSelect(pathName)}
                       className={`w-full text-left px-3 py-2 rounded transition-colors text-sm font-mono flex items-center justify-between ${
                         selectedPath === pathName
                           ? 'bg-blue-600 text-white'
