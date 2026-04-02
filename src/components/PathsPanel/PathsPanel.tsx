@@ -195,6 +195,56 @@ export function PathsPanel({
     }
   }
 
+  // Handle path name rename from PathEditForm (WP-005)
+  const handleRenamePathName = (newPathName: string): { success: boolean; error?: string } => {
+    if (!selectedPath || !onUpdateSpecification) {
+      return { success: false, error: 'No path selected' }
+    }
+
+    // Trim the new name
+    const trimmedNewName = newPathName.trim()
+
+    // Check if new name already exists (and it's not the same as current)
+    const allPaths = (specification.content.paths as Record<string, any>) || {}
+    if (trimmedNewName !== selectedPath && allPaths[trimmedNewName]) {
+      return {
+        success: false,
+        error: `A path with the name "${trimmedNewName}" already exists. Please choose a different name.`,
+      }
+    }
+
+    // If the name hasn't changed, nothing to do
+    if (trimmedNewName === selectedPath) {
+      return { success: true }
+    }
+
+    // Perform the rename - WP-005
+    onUpdateSpecification((spec) => {
+      const updatedPaths = { ...(spec.content.paths as Record<string, any>) || {} }
+
+      // Copy all operations from old path to new path
+      const oldPathData = updatedPaths[selectedPath] || {}
+      updatedPaths[trimmedNewName] = { ...oldPathData }
+
+      // Delete the old path
+      delete updatedPaths[selectedPath]
+
+      return {
+        ...spec,
+        content: {
+          ...spec.content,
+          paths: updatedPaths,
+        },
+        updatedAt: Date.now(),
+      }
+    })
+
+    // Update selected path to new name so it remains selected
+    setSelectedPath(trimmedNewName)
+
+    return { success: true }
+  }
+
   return (
     <div className="p-8 bg-white flex-1 overflow-y-auto">
       <div className="max-w-4xl">
@@ -205,6 +255,7 @@ export function PathsPanel({
             operations={getOperationsForEditForm()}
             onAddOperation={handleAddOperationFromForm}
             onDeleteOperation={handleDeleteOperationFromForm}
+            onRenamePathName={handleRenamePathName}
             onClose={() => setSelectedPath(null)}
           />
         ) : (
