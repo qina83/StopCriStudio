@@ -206,8 +206,7 @@ export function PathEditForm({
 
       {/* HTTP Methods Section */}
       <div className="mb-8">
-        <h3 className="text-lg font-semibold text-slate-900 mb-4">Available HTTP Methods</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+        <div className="flex gap-2">
           {HTTP_METHODS.map((method) => {
             const isAdded = operations[method] !== undefined
             const isSelected = selectedOperation === method
@@ -221,15 +220,15 @@ export function PathEditForm({
                     handleMethodButtonClick(method)
                   }
                 }}
-                className={`py-3 px-4 rounded-lg font-bold transition-all ${
+                className={`flex-1 py-2 px-3 rounded-lg font-bold transition-all text-sm text-center ${
                   getMethodColor(method, isAdded)
                 } ${isSelected && isAdded ? 'ring-2 ring-offset-2 ring-blue-600 shadow-md' : ''}`}
               >
-                <div className="text-lg">{method}</div>
+                <div>{method}</div>
                 {isAdded ? (
-                  <div className="text-xs font-normal mt-1 opacity-75">Added ✓</div>
+                  <div className="text-xs font-normal mt-0.5 opacity-75">✓</div>
                 ) : (
-                  <div className="text-xs font-normal mt-1">+ Add</div>
+                  <div className="text-xs font-normal mt-0.5">+</div>
                 )}
               </button>
             )
