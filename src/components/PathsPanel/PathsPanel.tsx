@@ -1,11 +1,11 @@
 /**
  * PathsPanel Component
  * Manages API paths and operations in the specification
- * Implements WP-002.1, WP-002.2, WP-002.3, WP-002.4
+ * Implements WP-002.1, WP-002.2, WP-002.3, WP-002.4, WP-006
  */
 
 import React, { useState } from 'react'
-import { OpenAPISpecification, HTTPMethod, PathOperation } from '../../types'
+import { OpenAPISpecification, HTTPMethod, PathOperation, PathParameter } from '../../types'
 import { PathEditForm } from './PathEditForm'
 
 const HTTP_METHODS: HTTPMethod[] = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
@@ -245,6 +245,67 @@ export function PathsPanel({
     return { success: true }
   }
 
+  // WP-006: Path parameters handlers
+  const getPathParametersForEditForm = (): PathParameter[] => {
+    if (!selectedPath) return []
+    const paths = (specification.content.paths as Record<string, any>) || {}
+    const pathObj = paths[selectedPath] || {}
+    return pathObj.parameters || []
+  }
+
+  const handlePathParametersChange = (parameters: PathParameter[]) => {
+    if (selectedPath && onUpdateSpecification) {
+      onUpdateSpecification((spec) => {
+        const paths = (spec.content.paths as Record<string, any>) || {}
+        const pathObj = paths[selectedPath] || {}
+
+        return {
+          ...spec,
+          content: {
+            ...spec.content,
+            paths: {
+              ...paths,
+              [selectedPath]: {
+                ...pathObj,
+                parameters,
+              },
+            },
+          },
+          updatedAt: Date.now(),
+        }
+      })
+    }
+  }
+
+  const handlePathParameterUpdate = (paramName: string, updates: Partial<PathParameter>) => {
+    if (selectedPath && onUpdateSpecification) {
+      onUpdateSpecification((spec) => {
+        const paths = (spec.content.paths as Record<string, any>) || {}
+        const pathObj = paths[selectedPath] || {}
+        const parameters = pathObj.parameters || []
+
+        const updatedParameters = parameters.map((param: PathParameter) =>
+          param.name === paramName ? { ...param, ...updates } : param
+        )
+
+        return {
+          ...spec,
+          content: {
+            ...spec.content,
+            paths: {
+              ...paths,
+              [selectedPath]: {
+                ...pathObj,
+                parameters: updatedParameters,
+              },
+            },
+          },
+          updatedAt: Date.now(),
+        }
+      })
+    }
+  }
+
   return (
     <div className="p-8 bg-white flex-1 overflow-y-auto">
       <div className="max-w-4xl">
@@ -257,6 +318,9 @@ export function PathsPanel({
             onDeleteOperation={handleDeleteOperationFromForm}
             onRenamePathName={handleRenamePathName}
             onClose={() => setSelectedPath(null)}
+            pathParameters={getPathParametersForEditForm()}
+            onPathParametersChange={handlePathParametersChange}
+            onPathParameterUpdate={handlePathParameterUpdate}
           />
         ) : (
           <>

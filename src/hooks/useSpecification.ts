@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
-import { OpenAPISpecification, PathOperation, HTTPMethod } from '../types'
+import { OpenAPISpecification, PathOperation, HTTPMethod, PathParameter } from '../types'
 import { saveSpecification } from '../services/storageService'
 
 const AUTOSAVE_DELAY = 1000 // 1 second
@@ -190,6 +190,71 @@ export function useSpecification(initialSpec: OpenAPISpecification) {
     [updateSpecification]
   )
 
+  // WP-006: Path parameter management methods
+  const getPathParameters = useCallback(
+    (pathName: string): PathParameter[] => {
+      const paths = (specification.content.paths as Record<string, any>) || {}
+      const pathObj = paths[pathName] || {}
+      return pathObj.parameters || []
+    },
+    [specification]
+  )
+
+  const updatePathParameters = useCallback(
+    (pathName: string, parameters: PathParameter[]) => {
+      updateSpecification((spec) => {
+        const paths = (spec.content.paths as Record<string, any>) || {}
+        const pathObj = paths[pathName] || {}
+
+        return {
+          ...spec,
+          content: {
+            ...spec.content,
+            paths: {
+              ...paths,
+              [pathName]: {
+                ...pathObj,
+                parameters,
+              },
+            },
+          },
+          updatedAt: Date.now(),
+        }
+      })
+    },
+    [updateSpecification]
+  )
+
+  const updatePathParameter = useCallback(
+    (pathName: string, parameterName: string, updates: Partial<PathParameter>) => {
+      updateSpecification((spec) => {
+        const paths = (spec.content.paths as Record<string, any>) || {}
+        const pathObj = paths[pathName] || {}
+        const parameters = pathObj.parameters || []
+
+        const updatedParameters = parameters.map((param: PathParameter) =>
+          param.name === parameterName ? { ...param, ...updates } : param
+        )
+
+        return {
+          ...spec,
+          content: {
+            ...spec.content,
+            paths: {
+              ...paths,
+              [pathName]: {
+                ...pathObj,
+                parameters: updatedParameters,
+              },
+            },
+          },
+          updatedAt: Date.now(),
+        }
+      })
+    },
+    [updateSpecification]
+  )
+
   return {
     specification,
     updateSpecification,
@@ -200,6 +265,9 @@ export function useSpecification(initialSpec: OpenAPISpecification) {
     deletePath,
     getPathOperations,
     getPaths,
+    getPathParameters,
+    updatePathParameters,
+    updatePathParameter,
     isDirty,
     isSaving,
   }

@@ -3,12 +3,20 @@
  * Implements WP-002.4: Edit path with operation management form
  * Shows all available HTTP methods as buttons and allows adding/removing operations
  * Implements WP-005: Allow inline editing of path names
+ * Implements WP-006: Path parameters management
  */
 
-import React, { useState, useRef } from 'react'
-import { HTTPMethod, PathOperation } from '../../types'
+import React, { useState, useRef, useEffect } from 'react'
+import { HTTPMethod, PathOperation, PathParameter, ParameterType } from '../../types'
+import {
+  syncParametersWithPath,
+  findDuplicateParameterNames,
+  findOrphanedParameters,
+  validatePathFormat,
+} from '../../utils/pathParameterUtils'
 
 const HTTP_METHODS: HTTPMethod[] = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
+const PARAMETER_TYPES: ParameterType[] = ['string', 'number', 'integer', 'boolean']
 
 interface PathEditFormProps {
   pathName: string
@@ -17,6 +25,10 @@ interface PathEditFormProps {
   onDeleteOperation: (method: HTTPMethod) => void
   onRenamePathName?: (newPathName: string) => { success: boolean; error?: string }
   onClose: () => void
+  // WP-006: Path parameters support
+  pathParameters?: PathParameter[]
+  onPathParametersChange?: (parameters: PathParameter[]) => void
+  onPathParameterUpdate?: (paramName: string, updates: Partial<PathParameter>) => void
 }
 
 /**
@@ -123,17 +135,49 @@ export function PathEditForm({
   onDeleteOperation,
   onRenamePathName,
   onClose,
+  pathParameters = [],
+  onPathParametersChange,
+  onPathParameterUpdate,
 }: PathEditFormProps) {
   const [selectedOperation, setSelectedOperation] = useState<HTTPMethod | null>(null)
   const [showAddConfirmModal, setShowAddConfirmModal] = useState(false)
   const [showDeleteConfirmModal, setShowDeleteConfirmModal] = useState(false)
   const [methodToAdd, setMethodToAdd] = useState<HTTPMethod | null>(null)
+  const [editingDescription, setEditingDescription] = useState<string | null>(null)
+  const [validationErrors, setValidationErrors] = useState<string[]>([])
   
   // WP-005: Inline path name editing
   const [isEditingPathName, setIsEditingPathName] = useState(false)
   const [editedPathName, setEditedPathName] = useState(pathName)
   const [pathNameError, setPathNameError] = useState<string | null>(null)
   const editInputRef = useRef<HTMLInputElement>(null)
+
+  // WP-006: Validate and sync path parameters
+  useEffect(() => {
+    if (!onPathParametersChange || !onPathParameterUpdate) return
+
+    const errors: string[] = []
+    const formatValidation = validatePathFormat(pathName)
+    if (!formatValidation.valid && formatValidation.error) {
+      errors.push(formatValidation.error)
+    }
+    const duplicates = findDuplicateParameterNames(pathParameters)
+    if (duplicates.length > 0) {
+      errors.push(`Duplicate parameter names: ${duplicates.join(', ')}`)
+    }
+    const orphaned = findOrphanedParameters(pathName, pathParameters)
+    if (orphaned.length > 0) {
+      errors.push(
+        `Parameters not found in path: ${orphaned.join(', ')}. These parameters do not match any placeholders in the path.`
+      )
+    }
+    setValidationErrors(errors)
+
+    const synced = syncParametersWithPath(pathName, pathParameters)
+    if (JSON.stringify(synced) !== JSON.stringify(pathParameters)) {
+      onPathParametersChange(synced)
+    }
+  }, [pathName, pathParameters, onPathParametersChange, onPathParameterUpdate])
 
   const getMethodColor = (method: HTTPMethod, isAdded: boolean): string => {
     if (isAdded) {
@@ -353,6 +397,114 @@ export function PathEditForm({
           </div>
         )}
       </div>
+
+      {/* WP-006: Path Parameters Section */}
+      {onPathParametersChange && onPathParameterUpdate && pathParameters.length > 0 && (
+        <div className="mb-8 border border-slate-200 rounded-lg bg-slate-50">
+          {/* Section Header */}
+          <div className="px-6 py-4 border-b border-slate-200 bg-slate-100">
+            <h3 className="text-lg font-bold text-slate-900">Path Parameters</h3>
+          </div>
+
+          {/* Validation Errors */}
+          {validationErrors.length > 0 && (
+            <div className="px-6 py-3 bg-red-50 border-b border-red-200">
+              {validationErrors.map((error, idx) => (
+                <div key={idx} className="flex gap-2 text-sm text-red-700 mb-2 last:mb-0">
+                  <span>⚠️</span>
+                  <span>{error}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Parameters Table - One row per parameter */}
+          <div className="px-6 py-4">
+            {/* Table Header */}
+            <div className="grid grid-cols-12 gap-3 mb-3 pb-3 border-b border-slate-200">
+              <div className="col-span-3 text-xs font-semibold text-slate-600 uppercase tracking-wide">Name</div>
+              <div className="col-span-2 text-xs font-semibold text-slate-600 uppercase tracking-wide">Type</div>
+              <div className="col-span-7 text-xs font-semibold text-slate-600 uppercase tracking-wide">Description</div>
+            </div>
+
+            {/* Parameters Rows */}
+            <div className="space-y-2">
+              {pathParameters.map((param) => (
+                <div key={param.name} className="grid grid-cols-12 gap-3 items-start">
+                  {/* Name - as label */}
+                  <div className="col-span-3 flex items-center pt-2">
+                    <code className="text-sm font-mono font-bold text-slate-900">
+                      {'{'}
+                      {param.name}
+                      {'}'}
+                    </code>
+                  </div>
+
+                  {/* Type Selector */}
+                  <div className="col-span-2">
+                    <select
+                      value={param.type}
+                      onChange={(e) => onPathParameterUpdate(param.name, { type: e.target.value as ParameterType })}
+                      className="w-full px-2 py-2 border border-slate-300 rounded bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    >
+                      {PARAMETER_TYPES.map((type) => (
+                        <option key={type} value={type}>
+                          {type}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Description Field */}
+                  <div className="col-span-7">
+                    {editingDescription === param.name ? (
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={param.description || ''}
+                          onChange={(e) => onPathParameterUpdate(param.name, { description: e.target.value })}
+                          onBlur={() => setEditingDescription(null)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === 'Escape') {
+                              setEditingDescription(null)
+                            }
+                          }}
+                          placeholder="Enter description..."
+                          className="flex-1 px-2 py-2 text-sm border-2 border-blue-500 rounded focus:outline-none bg-white"
+                          autoFocus
+                        />
+                        <button
+                          onClick={() => setEditingDescription(null)}
+                          className="px-2 py-2 text-green-600 hover:text-green-800 hover:bg-green-100 rounded transition-colors font-bold text-sm"
+                          title="Done"
+                        >
+                          ✓
+                        </button>
+                      </div>
+                    ) : (
+                      <div
+                        onClick={() => setEditingDescription(param.name)}
+                        className="w-full px-2 py-2 border border-slate-300 rounded bg-white cursor-pointer hover:bg-slate-50 hover:border-blue-400 transition-colors text-sm text-slate-700"
+                      >
+                        {param.description ? (
+                          <span>{param.description}</span>
+                        ) : (
+                          <span className="text-slate-400 italic">Click to add...</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Footer Info */}
+          <div className="px-6 py-3 bg-slate-100 border-t border-slate-200 text-xs text-slate-600">
+            <p>Path parameters are always required in OpenAPI specifications.</p>
+          </div>
+        </div>
+      )}
 
       {/* HTTP Methods Section */}
       <div className="mb-8">

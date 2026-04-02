@@ -21,6 +21,20 @@ export interface SpecificationMetadata {
 export type HTTPMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' | 'HEAD' | 'OPTIONS'
 
 /**
+ * Path Parameter types - OpenAPI base parameter types
+ */
+export type ParameterType = 'string' | 'number' | 'integer' | 'boolean'
+
+/**
+ * Path Parameter definition (WP-006)
+ */
+export interface PathParameter {
+  name: string
+  type: ParameterType
+  description?: string
+}
+
+/**
  * API Path Operation
  */
 export interface PathOperation {
@@ -38,6 +52,7 @@ export interface PathOperation {
 export interface APIPath {
   pathName: string
   operations: Record<HTTPMethod, PathOperation | undefined>
+  parameters?: PathParameter[]
 }
 
 /**
