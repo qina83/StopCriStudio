@@ -434,9 +434,7 @@ export function PathEditForm({
                   {/* Name - as label */}
                   <div className="col-span-3 flex items-center pt-2">
                     <code className="text-sm font-mono font-bold text-slate-900">
-                      {'{'}
                       {param.name}
-                      {'}'}
                     </code>
                   </div>
 

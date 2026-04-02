@@ -54,7 +54,7 @@ export function Sidebar({ activeItem, onNavigate, specification, selectedPath, o
   }
 
   return (
-    <aside className="w-64 bg-slate-900 text-white border-r border-slate-800 flex flex-col">
+    <aside className="w-[32rem] bg-slate-900 text-white border-r border-slate-800 flex flex-col">
       {/* Header */}
       <div className="p-4 border-b border-slate-800">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-400">Specification</h2>
