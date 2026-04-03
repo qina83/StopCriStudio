@@ -1,11 +1,12 @@
 import { dump } from 'js-yaml'
-import { OpenAPISpecification, PathParameter } from '../types'
+import { OpenAPISpecification, PathParameter, QueryParameter, ObjectQueryParameter, ArrayQueryParameter, ScalarQueryParameter } from '../types'
 import { toOpenAPIParameters } from './pathParameterUtils'
 
 /**
  * Export specification as YAML file
  * Implements WP-004: Export specification as YAML
  * Includes WP-006: Path parameters in OpenAPI format
+ * Includes WP-020: Query parameters in OpenAPI format
  */
 export function exportSpecificationAsYAML(specification: OpenAPISpecification): void {
   try {
@@ -32,6 +33,7 @@ export function exportSpecificationAsYAML(specification: OpenAPISpecification): 
  * Transform specification content for export
  * Converts internal path parameters format to OpenAPI format
  * WP-006: Ensures path parameters are included in all operations
+ * WP-020: Exports query parameters per operation
  */
 function transformForExport(content: Record<string, any>): Record<string, any> {
   const transformed = JSON.parse(JSON.stringify(content)) // Deep clone
@@ -49,17 +51,28 @@ function transformForExport(content: Record<string, any>): Record<string, any> {
       httpMethods.forEach((method) => {
         if (pathObj[method]) {
           const operation = pathObj[method]
-          // Merge path parameters with operation parameters
+
+          // Build query parameters from internal _queryParams (WP-020)
+          const queryParams: QueryParameter[] = operation._queryParams || []
+          const openAPIQueryParams = queryParams.map(queryParamToOpenAPI)
+
+          // Merge path parameters with query parameters (path params first)
           const existingParams = operation.parameters || []
           const allParams = [
             ...openAPIParameters,
+            ...openAPIQueryParams,
             ...existingParams.filter(
-              (p: any) => !openAPIParameters.some((pp) => pp.name === p.name && pp.in === 'path')
+              (p: any) =>
+                !openAPIParameters.some((pp) => pp.name === p.name && pp.in === 'path') &&
+                !openAPIQueryParams.some((qp) => qp.name === p.name && qp.in === 'query')
             ),
           ]
           if (allParams.length > 0) {
             operation.parameters = allParams
           }
+
+          // Remove internal _queryParams property before export
+          delete operation._queryParams
         }
       })
 
@@ -69,6 +82,62 @@ function transformForExport(content: Record<string, any>): Record<string, any> {
   }
 
   return transformed
+}
+
+// ─── Query parameter → OpenAPI schema (WP-020) ────────────────────────────────
+
+function buildQueryParamSchema(param: QueryParameter): Record<string, unknown> {
+  if (param.type === 'object') {
+    const op = param as ObjectQueryParameter
+    const properties: Record<string, unknown> = {}
+    for (const prop of op.properties) {
+      properties[prop.name] = buildQueryParamSchema(prop)
+    }
+    return Object.keys(properties).length > 0 ? { type: 'object', properties } : { type: 'object' }
+  }
+
+  if (param.type === 'array') {
+    const ap = param as ArrayQueryParameter
+    let items: Record<string, unknown>
+    if (ap.itemType === 'object') {
+      const itemProperties: Record<string, unknown> = {}
+      for (const prop of ap.itemProperties ?? []) {
+        itemProperties[prop.name] = buildQueryParamSchema(prop)
+      }
+      items = Object.keys(itemProperties).length > 0 ? { type: 'object', properties: itemProperties } : { type: 'object' }
+    } else {
+      items = { type: ap.itemType }
+    }
+    return { type: 'array', items }
+  }
+
+  // Scalar
+  const sp = param as ScalarQueryParameter
+  const schema: Record<string, unknown> = { type: sp.type }
+  if (sp.pattern) schema.pattern = sp.pattern
+  if (sp.minimum !== undefined) schema.minimum = sp.minimum
+  if (sp.maximum !== undefined) schema.maximum = sp.maximum
+  if (sp.defaultValue !== undefined && sp.defaultValue !== '') {
+    if (sp.type === 'number' || sp.type === 'integer') {
+      const n = Number(sp.defaultValue)
+      if (!isNaN(n)) schema.default = n
+    } else if (sp.type === 'boolean') {
+      schema.default = sp.defaultValue === 'true'
+    } else {
+      schema.default = sp.defaultValue
+    }
+  }
+  return schema
+}
+
+function queryParamToOpenAPI(param: QueryParameter): Record<string, unknown> {
+  return {
+    in: 'query',
+    name: param.name,
+    ...(param.required ? { required: true } : {}),
+    ...(param.description ? { description: param.description } : {}),
+    schema: buildQueryParamSchema(param),
+  }
 }
 
 /**

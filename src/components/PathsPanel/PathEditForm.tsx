@@ -7,13 +7,14 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react'
-import { HTTPMethod, PathOperation, PathParameter, ParameterType } from '../../types'
+import { HTTPMethod, PathOperation, PathParameter, ParameterType, QueryParameter } from '../../types'
 import {
   syncParametersWithPath,
   findDuplicateParameterNames,
   findOrphanedParameters,
   validatePathFormat,
 } from '../../utils/pathParameterUtils'
+import { QueryParametersPanel } from '../QueryParameters/QueryParametersPanel'
 
 const HTTP_METHODS: HTTPMethod[] = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
 const PARAMETER_TYPES: ParameterType[] = ['string', 'number', 'integer', 'boolean']
@@ -29,6 +30,9 @@ interface PathEditFormProps {
   pathParameters?: PathParameter[]
   onPathParametersChange?: (parameters: PathParameter[]) => void
   onPathParameterUpdate?: (paramName: string, updates: Partial<PathParameter>) => void
+  // WP-011: Query parameters support
+  getQueryParameters?: (method: HTTPMethod) => QueryParameter[]
+  onQueryParametersChange?: (method: HTTPMethod, parameters: QueryParameter[]) => void
 }
 
 /**
@@ -138,6 +142,8 @@ export function PathEditForm({
   pathParameters = [],
   onPathParametersChange,
   onPathParameterUpdate,
+  getQueryParameters,
+  onQueryParametersChange,
 }: PathEditFormProps) {
   const [selectedOperation, setSelectedOperation] = useState<HTTPMethod | null>(null)
   const [showAddConfirmModal, setShowAddConfirmModal] = useState(false)
@@ -568,6 +574,16 @@ export function PathEditForm({
           >
             Delete {selectedOperation} Operation
           </button>
+
+          {/* WP-011: Query Parameters section */}
+          {getQueryParameters && onQueryParametersChange && (
+            <QueryParametersPanel
+              pathName={pathName}
+              method={selectedOperation}
+              parameters={getQueryParameters(selectedOperation)}
+              onChange={(params) => onQueryParametersChange(selectedOperation, params)}
+            />
+          )}
         </div>
       )}
 

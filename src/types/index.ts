@@ -72,3 +72,36 @@ export interface AppState {
   isLoading: boolean
   error: string | null
 }
+
+// ─── Query Parameter Types (WP-011, WP-014, WP-016, WP-017) ───────────────────
+
+export type QueryParamScalarType = 'string' | 'number' | 'integer' | 'boolean'
+export type QueryParamItemType = 'string' | 'number' | 'integer' | 'boolean' | 'object'
+export type QueryParamType = QueryParamScalarType | 'object' | 'array'
+
+export interface QueryParameterBase {
+  name: string
+  required?: boolean
+  description?: string
+}
+
+export interface ScalarQueryParameter extends QueryParameterBase {
+  type: QueryParamScalarType
+  defaultValue?: string
+  pattern?: string
+  minimum?: number
+  maximum?: number
+}
+
+export interface ObjectQueryParameter extends QueryParameterBase {
+  type: 'object'
+  properties: QueryParameter[]
+}
+
+export interface ArrayQueryParameter extends QueryParameterBase {
+  type: 'array'
+  itemType: QueryParamItemType
+  itemProperties?: QueryParameter[]
+}
+
+export type QueryParameter = ScalarQueryParameter | ObjectQueryParameter | ArrayQueryParameter

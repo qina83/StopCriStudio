@@ -13,6 +13,7 @@ export function useSpecification(initialSpec: OpenAPISpecification) {
   const [specification, setSpecification] = useState<OpenAPISpecification>(initialSpec)
   const [isDirty, setIsDirty] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [storageError, setStorageError] = useState<string | null>(null)
 
   // Auto-save when specification changes
   useEffect(() => {
@@ -23,6 +24,10 @@ export function useSpecification(initialSpec: OpenAPISpecification) {
       try {
         saveSpecification(specification)
         setIsDirty(false)
+        setStorageError(null)
+      } catch (error) {
+        console.error('Auto-save failed:', error)
+        setStorageError('Storage quota exceeded. Some changes may not be saved.')
       } finally {
         setIsSaving(false)
       }
@@ -36,6 +41,24 @@ export function useSpecification(initialSpec: OpenAPISpecification) {
       setSpecification((current) => {
         const updated = updater(current)
         setIsDirty(true)
+        return updated
+      })
+    },
+    []
+  )
+
+  /** Immediately persists to localStorage – used for query parameter changes (WP-019) */
+  const updateSpecificationAndSave = useCallback(
+    (updater: (spec: OpenAPISpecification) => OpenAPISpecification) => {
+      setSpecification((current) => {
+        const updated = updater(current)
+        try {
+          saveSpecification(updated)
+          setStorageError(null)
+        } catch (error) {
+          console.error('Immediate save failed:', error)
+          setStorageError('Storage quota exceeded. Some changes may not be saved.')
+        }
         return updated
       })
     },
@@ -258,6 +281,7 @@ export function useSpecification(initialSpec: OpenAPISpecification) {
   return {
     specification,
     updateSpecification,
+    updateSpecificationAndSave,
     updateInfo,
     addPath,
     addOperation,
@@ -270,5 +294,6 @@ export function useSpecification(initialSpec: OpenAPISpecification) {
     updatePathParameter,
     isDirty,
     isSaving,
+    storageError,
   }
 }

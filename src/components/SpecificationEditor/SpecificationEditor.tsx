@@ -25,7 +25,7 @@ export function SpecificationEditor({ specification, onBack }: SpecificationEdit
   const [pathViewMode, setPathViewMode] = useState<PathViewMode>('list') // WP-002.1
   const [selectedPath, setSelectedPath] = useState<string | null>(null) // Track selected path from sidebar
   const [isExporting, setIsExporting] = useState(false)
-  const { specification: spec, updateInfo, updateSpecification, isSaving } = useSpecification(specification)
+  const { specification: spec, updateInfo, updateSpecification, updateSpecificationAndSave, isSaving } = useSpecification(specification)
 
   const handleAddSchema = () => {
     // TODO: Implement add schema dialog
@@ -77,6 +77,7 @@ export function SpecificationEditor({ specification, onBack }: SpecificationEdit
           <PathsPanel
             specification={spec}
             onUpdateSpecification={updateSpecification}
+            onUpdateSpecificationAndSave={updateSpecificationAndSave}
             viewMode={pathViewMode}
             onViewModeChange={handlePathViewModeChange}
             selectedPath={selectedPath}

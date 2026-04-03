@@ -5,7 +5,7 @@
  */
 
 import React, { useState } from 'react'
-import { OpenAPISpecification, HTTPMethod, PathOperation, PathParameter } from '../../types'
+import { OpenAPISpecification, HTTPMethod, PathOperation, PathParameter, QueryParameter } from '../../types'
 import { PathEditForm } from './PathEditForm'
 
 const HTTP_METHODS: HTTPMethod[] = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
@@ -13,6 +13,7 @@ const HTTP_METHODS: HTTPMethod[] = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HE
 interface PathsPanelProps {
   specification: OpenAPISpecification
   onUpdateSpecification?: (updater: (spec: OpenAPISpecification) => OpenAPISpecification) => void
+  onUpdateSpecificationAndSave?: (updater: (spec: OpenAPISpecification) => OpenAPISpecification) => void
   viewMode?: 'form' | 'list'
   onViewModeChange?: (mode: 'form' | 'list') => void
   selectedPath?: string | null
@@ -24,6 +25,7 @@ type ViewMode = 'form' | 'list'
 export function PathsPanel({
   specification,
   onUpdateSpecification,
+  onUpdateSpecificationAndSave,
   viewMode: externalViewMode,
   onViewModeChange,
   selectedPath: externalSelectedPath,
@@ -306,6 +308,45 @@ export function PathsPanel({
     }
   }
 
+  // WP-011: Query parameter handlers (with immediate save per WP-019)
+  const getQueryParametersForOperation = (method: HTTPMethod): QueryParameter[] => {
+    if (!selectedPath) return []
+    const paths = (specification.content.paths as Record<string, any>) || {}
+    const pathObj = paths[selectedPath] || {}
+    const operation = pathObj[method.toLowerCase()]
+    return operation?._queryParams || []
+  }
+
+  const handleQueryParametersChange = (method: HTTPMethod, parameters: QueryParameter[]) => {
+    if (selectedPath) {
+      const updateFn = onUpdateSpecificationAndSave || onUpdateSpecification
+      if (updateFn) {
+        updateFn((spec) => {
+          const paths = (spec.content.paths as Record<string, any>) || {}
+          const pathObj = paths[selectedPath] || {}
+          const operation = pathObj[method.toLowerCase()] || {}
+          return {
+            ...spec,
+            content: {
+              ...spec.content,
+              paths: {
+                ...paths,
+                [selectedPath]: {
+                  ...pathObj,
+                  [method.toLowerCase()]: {
+                    ...operation,
+                    _queryParams: parameters,
+                  },
+                },
+              },
+            },
+            updatedAt: Date.now(),
+          }
+        })
+      }
+    }
+  }
+
   return (
     <div className="p-8 bg-white flex-1 overflow-y-auto">
       <div className="max-w-4xl">
@@ -321,6 +362,8 @@ export function PathsPanel({
             pathParameters={getPathParametersForEditForm()}
             onPathParametersChange={handlePathParametersChange}
             onPathParameterUpdate={handlePathParameterUpdate}
+            getQueryParameters={getQueryParametersForOperation}
+            onQueryParametersChange={handleQueryParametersChange}
           />
         ) : (
           <>

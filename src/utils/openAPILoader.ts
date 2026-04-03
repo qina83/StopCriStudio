@@ -5,7 +5,7 @@
  */
 
 import YAML from 'js-yaml'
-import { OpenAPISpecification } from '../types'
+import { OpenAPISpecification, QueryParameter, ScalarQueryParameter, ObjectQueryParameter, ArrayQueryParameter, QueryParamScalarType, QueryParamItemType } from '../types'
 
 export interface ValidationError {
   field: string
@@ -135,6 +135,9 @@ export function loadOpenAPIFile(fileContent: string, fileName: string): LoadResu
     const specName = (info.title as string) || fileName.replace(/\.(yaml|yml|json)$/, '')
     const id = `spec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
 
+    // Convert OpenAPI query parameters to internal format (WP-011/WP-019)
+    const transformedContent = importQueryParameters(spec)
+
     const specification: OpenAPISpecification = {
       id,
       name: specName,
@@ -142,7 +145,7 @@ export function loadOpenAPIFile(fileContent: string, fileName: string): LoadResu
       openAPIVersion: openAPIVersion as '3.0.0',
       createdAt: now,
       updatedAt: now,
-      content: spec,
+      content: transformedContent,
     }
 
     return {
@@ -160,4 +163,112 @@ export function loadOpenAPIFile(fileContent: string, fileName: string): LoadResu
       ],
     }
   }
+}
+
+// ─── Import: OpenAPI → internal _queryParams (WP-011/WP-019) ─────────────────
+
+const SCALAR_TYPES = new Set<string>(['string', 'number', 'integer', 'boolean'])
+const HTTP_METHODS = ['get', 'post', 'put', 'delete', 'patch', 'head', 'options']
+
+/**
+ * Walk all operations and move `in: "query"` parameters into `_queryParams`.
+ * Leaves `in: "path"` parameters in the `parameters` array unchanged.
+ */
+function importQueryParameters(content: Record<string, any>): Record<string, any> {
+  const result = JSON.parse(JSON.stringify(content)) as Record<string, any>
+
+  if (!result.paths || typeof result.paths !== 'object') return result
+
+  for (const pathName of Object.keys(result.paths)) {
+    const pathObj = result.paths[pathName]
+    for (const method of HTTP_METHODS) {
+      const operation = pathObj[method]
+      if (!operation || typeof operation !== 'object') continue
+
+      const params: any[] = Array.isArray(operation.parameters) ? operation.parameters : []
+      const queryParams = params.filter((p: any) => p.in === 'query')
+      const nonQueryParams = params.filter((p: any) => p.in !== 'query')
+
+      if (queryParams.length > 0) {
+        operation._queryParams = queryParams.map(openAPIParamToInternal)
+        if (nonQueryParams.length > 0) {
+          operation.parameters = nonQueryParams
+        } else {
+          delete operation.parameters
+        }
+      }
+    }
+  }
+
+  return result
+}
+
+function openAPIParamToInternal(param: any): QueryParameter {
+  const schema = param.schema || {}
+  return openAPISchemaToQueryParam(
+    param.name ?? 'param',
+    schema,
+    param.required === true,
+    typeof param.description === 'string' ? param.description : undefined,
+  )
+}
+
+function openAPISchemaToQueryParam(
+  name: string,
+  schema: any,
+  required: boolean,
+  description: string | undefined,
+): QueryParameter {
+  const type = schema.type ?? 'string'
+
+  if (type === 'object') {
+    const properties: QueryParameter[] = []
+    if (schema.properties && typeof schema.properties === 'object') {
+      for (const [propName, propSchema] of Object.entries(schema.properties)) {
+        properties.push(openAPISchemaToQueryParam(propName, propSchema as any, false, undefined))
+      }
+    }
+    return {
+      name, type: 'object',
+      ...(required ? { required } : {}),
+      ...(description ? { description } : {}),
+      properties,
+    } as ObjectQueryParameter
+  }
+
+  if (type === 'array') {
+    const items = schema.items || {}
+    const itemType: QueryParamItemType = SCALAR_TYPES.has(items.type)
+      ? (items.type as QueryParamItemType)
+      : items.type === 'object' ? 'object' : 'string'
+
+    const itemProperties: QueryParameter[] = []
+    if (itemType === 'object' && items.properties && typeof items.properties === 'object') {
+      for (const [propName, propSchema] of Object.entries(items.properties)) {
+        itemProperties.push(openAPISchemaToQueryParam(propName, propSchema as any, false, undefined))
+      }
+    }
+
+    return {
+      name, type: 'array', itemType,
+      ...(required ? { required } : {}),
+      ...(description ? { description } : {}),
+      ...(itemType === 'object' && itemProperties.length > 0 ? { itemProperties } : {}),
+    } as ArrayQueryParameter
+  }
+
+  // Scalar
+  const scalarType: QueryParamScalarType = SCALAR_TYPES.has(type) ? (type as QueryParamScalarType) : 'string'
+  const sp: ScalarQueryParameter = {
+    name, type: scalarType,
+    ...(required ? { required } : {}),
+    ...(description ? { description } : {}),
+  }
+  if (typeof schema.pattern === 'string') sp.pattern = schema.pattern
+  if (typeof schema.minimum === 'number') sp.minimum = schema.minimum
+  if (typeof schema.maximum === 'number') sp.maximum = schema.maximum
+  if (schema.default !== undefined && schema.default !== null) {
+    sp.defaultValue = String(schema.default)
+  }
+  return sp
 }
