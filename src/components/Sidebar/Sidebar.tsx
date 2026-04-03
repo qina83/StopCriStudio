@@ -124,19 +124,6 @@ export function Sidebar({ activeItem, onNavigate, specification, selectedPath, o
           </div>
         )}
 
-        {/* Info item */}
-        <button
-          onClick={() => onNavigate('info')}
-          className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
-            activeItem === 'info' ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <span>ℹ️</span>
-            <span className="font-medium">Info</span>
-          </div>
-        </button>
-
         {/* Paths item with accordion */}
         <div>
           <button

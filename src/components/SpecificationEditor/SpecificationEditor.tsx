@@ -106,9 +106,24 @@ export function SpecificationEditor({ specification, onBack }: SpecificationEdit
                 ←
               </button>
             )}
-            <div>
-              <h1 className="text-2xl font-bold text-slate-900">{spec.name}</h1>
-              <p className="text-sm text-slate-500">v{spec.specVersion}</p>
+            <div className="flex items-center gap-3">
+              <div>
+                <h1 className="text-2xl font-bold text-slate-900">{spec.name}</h1>
+                <p className="text-sm text-slate-500">v{spec.specVersion}</p>
+              </div>
+              {/* Edit API Information icon - WP-010 */}
+              <button
+                onClick={() => setActiveItem('info')}
+                className={`p-2 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${
+                  activeItem === 'info'
+                    ? 'bg-blue-600 text-white'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                }`}
+                title="Edit API Information"
+                aria-label="Edit API Information"
+              >
+                ✏️
+              </button>
             </div>
           </div>
           <div className="flex items-center gap-2">
