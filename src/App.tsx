@@ -1,18 +1,25 @@
 import React, { useState, useRef } from 'react'
 import { OpenAPISpecification } from './types'
 import { SpecificationEditor } from './components/SpecificationEditor/SpecificationEditor'
-import { createNewSpecification, saveSpecification } from './services/storageService'
+import { LoadSpecificationModal } from './components/LoadSpecificationModal'
+import {
+  createNewSpecification,
+  saveSpecification,
+  getAllSpecifications,
+} from './services/storageService'
 import { loadOpenAPIFile } from './utils/openAPILoader'
 
 /**
  * App Component
- * Main application entry point implementing WP-001, WP-002, and WP-007
+ * Main application entry point implementing WP-001, WP-002, WP-007, and WP-008
  */
 function App() {
   const [currentView, setCurrentView] = useState<'welcome' | 'editor'>('welcome')
   const [currentSpecification, setCurrentSpecification] = useState<OpenAPISpecification | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [loadErrorDetails, setLoadErrorDetails] = useState<string[]>([])
+  const [showLoadModal, setShowLoadModal] = useState(false)
+  const [savedSpecifications, setSavedSpecifications] = useState(getAllSpecifications())
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleCreateNew = () => {
@@ -24,6 +31,25 @@ function App() {
 
   const handleLoadFile = () => {
     fileInputRef.current?.click()
+  }
+
+  const handleLoadSavedSpecification = () => {
+    setShowLoadModal(true)
+  }
+
+  const handleLoadSpecification = (specification: OpenAPISpecification) => {
+    setCurrentSpecification(specification)
+    setCurrentView('editor')
+    setShowLoadModal(false)
+  }
+
+  const handleDeleteSpecification = (_id: string) => {
+    // Update the saved specifications list after deletion
+    setSavedSpecifications(getAllSpecifications())
+  }
+
+  const handleLoadModalClose = () => {
+    setShowLoadModal(false)
   }
 
   const handleFileSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -132,6 +158,15 @@ function App() {
         </div>
       )}
 
+      {/* Load Specification Modal - WP-008 */}
+      <LoadSpecificationModal
+        isOpen={showLoadModal}
+        specifications={savedSpecifications}
+        onLoad={handleLoadSpecification}
+        onClose={handleLoadModalClose}
+        onDelete={handleDeleteSpecification}
+      />
+
       {/* Header - Application title and welcome message */}
       <header className="text-center pt-16 pb-12">
         <h1 className="text-5xl md:text-6xl font-bold text-slate-900 mb-4">
@@ -158,12 +193,9 @@ function App() {
             </p>
           </button>
 
-          {/* Load existing specification button - WP-003 */}
+          {/* Load existing specification button - WP-008 */}
           <button
-            onClick={() => {
-              // TODO: Show load modal (WP-003)
-              console.log('Load existing specification')
-            }}
+            onClick={handleLoadSavedSpecification}
             className="group p-8 bg-white rounded-lg shadow-lg hover:shadow-2xl transition-all duration-200 transform hover:-translate-y-1 focus:outline-none focus:ring-4 focus:ring-blue-500 focus:ring-opacity-50"
             aria-label="Load a previously saved specification"
           >
