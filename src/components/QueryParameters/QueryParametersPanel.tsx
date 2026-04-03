@@ -477,6 +477,7 @@ interface ModalState {
 export function QueryParametersPanel({ pathName, method, parameters, onChange }: QueryParametersPanelProps) {
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set())
   const [modal, setModal] = useState<ModalState>({ open: false, mode: 'add', path: [], form: blankForm(), errors: {} })
+  const [confirmDeletePath, setConfirmDeletePath] = useState<number[] | null>(null)
 
   const methodColor = METHOD_COLORS[method.toUpperCase()] ?? 'bg-slate-100 text-slate-800'
 
@@ -524,7 +525,14 @@ export function QueryParametersPanel({ pathName, method, parameters, onChange }:
   }
 
   const handleDelete = (path: number[]) => {
-    onChange(deleteAtPath(parameters, path))
+    setConfirmDeletePath(path)
+  }
+
+  const confirmDelete = () => {
+    if (confirmDeletePath !== null) {
+      onChange(deleteAtPath(parameters, confirmDeletePath))
+      setConfirmDeletePath(null)
+    }
   }
 
   const renderTree = (params: QueryParameter[], parentPath: number[], depth: number): React.ReactNode => {
@@ -606,6 +614,34 @@ export function QueryParametersPanel({ pathName, method, parameters, onChange }:
           onSave={handleModalSave}
           onCancel={closeModal}
         />
+      )}
+
+      {/* Confirm delete modal */}
+      {confirmDeletePath !== null && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setConfirmDeletePath(null)}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <div className="bg-red-600 text-white px-6 py-4 rounded-t-xl">
+              <h3 className="text-xl font-bold">Delete parameter</h3>
+            </div>
+            <div className="p-6 space-y-4">
+              <p className="text-slate-700">Are you sure you want to delete this parameter? This action cannot be undone.</p>
+              <div className="flex justify-end gap-3">
+                <button
+                  onClick={() => setConfirmDeletePath(null)}
+                  className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDelete}
+                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
