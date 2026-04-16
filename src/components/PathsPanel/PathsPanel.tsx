@@ -5,7 +5,7 @@
  */
 
 import React, { useState } from 'react'
-import { OpenAPISpecification, HTTPMethod, PathOperation, PathParameter, QueryParameter, RequestBody } from '../../types'
+import { OpenAPISpecification, HTTPMethod, PathOperation, PathParameter, QueryParameter, RequestBody, OperationSecurityRequirement, SecurityScheme } from '../../types'
 import { PathEditForm } from './PathEditForm'
 
 const HTTP_METHODS: HTTPMethod[] = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
@@ -386,6 +386,74 @@ export function PathsPanel({
     }
   }
 
+  // WP-027–WP-031: Security handlers (with immediate save)
+  const getOperationSecurity = (method: HTTPMethod): OperationSecurityRequirement[] => {
+    if (!selectedPath) return []
+    const paths = (specification.content.paths as Record<string, any>) || {}
+    const pathObj = paths[selectedPath] || {}
+    const operation = pathObj[method.toLowerCase()]
+    return operation?._security || []
+  }
+
+  const getSecuritySchemes = (): Record<string, SecurityScheme> => {
+    const components = (specification.content.components as Record<string, any>) || {}
+    return (components.securitySchemes as Record<string, SecurityScheme>) || {}
+  }
+
+  /** Returns the set of scheme names used by ALL operations EXCEPT the given method on the selected path. */
+  const getOtherOperationsSchemeNames = (currentMethod: HTTPMethod): Set<string> => {
+    const names = new Set<string>()
+    const paths = (specification.content.paths as Record<string, any>) || {}
+    for (const [pName, pathObj] of Object.entries(paths)) {
+      for (const m of HTTP_METHODS) {
+        // Skip the current operation
+        if (pName === selectedPath && m === currentMethod) continue
+        const op = (pathObj as any)[m.toLowerCase()]
+        if (!op) continue
+        const sec: OperationSecurityRequirement[] = op._security || []
+        for (const req of sec) names.add(req.schemeName)
+      }
+    }
+    return names
+  }
+
+  const handleOperationSecurityChange = (
+    method: HTTPMethod,
+    security: OperationSecurityRequirement[],
+    schemes: Record<string, SecurityScheme>,
+  ) => {
+    if (!selectedPath) return
+    const updateFn = onUpdateSpecificationAndSave || onUpdateSpecification
+    if (!updateFn) return
+    updateFn((spec) => {
+      const paths = (spec.content.paths as Record<string, any>) || {}
+      const pathObj = paths[selectedPath] || {}
+      const operation = pathObj[method.toLowerCase()] || {}
+      const components = (spec.content.components as Record<string, any>) || {}
+      return {
+        ...spec,
+        content: {
+          ...spec.content,
+          paths: {
+            ...paths,
+            [selectedPath]: {
+              ...pathObj,
+              [method.toLowerCase()]: {
+                ...operation,
+                _security: security,
+              },
+            },
+          },
+          components: {
+            ...components,
+            securitySchemes: schemes,
+          },
+        },
+        updatedAt: Date.now(),
+      }
+    })
+  }
+
   return (
     <div className="p-8 bg-white flex-1 overflow-y-auto">
       <div className="max-w-4xl">
@@ -405,6 +473,10 @@ export function PathsPanel({
             onQueryParametersChange={handleQueryParametersChange}
             getRequestBody={getRequestBodyForOperation}
             onRequestBodyChange={handleRequestBodyChange}
+            getOperationSecurity={getOperationSecurity}
+            getSecuritySchemes={getSecuritySchemes}
+            getOtherOperationsSchemeNames={getOtherOperationsSchemeNames}
+            onOperationSecurityChange={handleOperationSecurityChange}
           />
         ) : (
           <>

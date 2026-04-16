@@ -110,6 +110,36 @@ export type QueryParameter = ScalarQueryParameter | ObjectQueryParameter | Array
 
 export const BODY_ELIGIBLE_METHODS: HTTPMethod[] = ['PUT', 'POST', 'PATCH']
 
+// ─── Security Types (WP-027, WP-028, WP-029, WP-030) ─────────────────────────
+
+export type ApiKeyLocation = 'header' | 'query' | 'cookie'
+export type HttpSchemeKind = 'basic' | 'bearer'
+
+export interface SecuritySchemeApiKey {
+  type: 'apiKey'
+  in: ApiKeyLocation
+  name: string // actual parameter name e.g. "X-API-Key"
+}
+
+export interface SecuritySchemeHttp {
+  type: 'http'
+  scheme: HttpSchemeKind
+  bearerFormat?: string
+}
+
+/** Catch-all for unsupported types (oauth2, openIdConnect, etc.) */
+export interface SecuritySchemeUnsupported {
+  type: string
+  [key: string]: unknown
+}
+
+export type SecurityScheme = SecuritySchemeApiKey | SecuritySchemeHttp | SecuritySchemeUnsupported
+
+/** Per-operation security requirement stored internally as _security */
+export interface OperationSecurityRequirement {
+  schemeName: string // key in components.securitySchemes
+}
+
 export const MEDIA_TYPE_OPTIONS = [
   'application/json',
   'application/x-www-form-urlencoded',

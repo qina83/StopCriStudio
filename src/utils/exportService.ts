@@ -1,5 +1,5 @@
 import { dump } from 'js-yaml'
-import { OpenAPISpecification, PathParameter, QueryParameter, ObjectQueryParameter, ArrayQueryParameter, ScalarQueryParameter, RequestBody, BodyParameter, ObjectBodyParameter, ArrayBodyParameter, ScalarBodyParameter, BODY_ELIGIBLE_METHODS, HTTPMethod } from '../types'
+import { OpenAPISpecification, PathParameter, QueryParameter, ObjectQueryParameter, ArrayQueryParameter, ScalarQueryParameter, RequestBody, BodyParameter, ObjectBodyParameter, ArrayBodyParameter, ScalarBodyParameter, BODY_ELIGIBLE_METHODS, HTTPMethod, SecurityScheme, SecuritySchemeApiKey, SecuritySchemeHttp, OperationSecurityRequirement } from '../types'
 import { toOpenAPIParameters } from './pathParameterUtils'
 
 /**
@@ -84,6 +84,16 @@ function transformForExport(content: Record<string, any>): Record<string, any> {
           }
           // Always remove internal _requestBody
           delete operation._requestBody
+
+          // WP-032: Export security requirements
+          const securityReqs: OperationSecurityRequirement[] = operation._security || []
+          if (securityReqs.length > 0) {
+            operation.security = securityReqs.map((req: OperationSecurityRequirement) => ({
+              [req.schemeName]: [],
+            }))
+          }
+          // Always remove internal _security
+          delete operation._security
         }
       })
 
@@ -92,7 +102,38 @@ function transformForExport(content: Record<string, any>): Record<string, any> {
     })
   }
 
+  // WP-032: Export components.securitySchemes
+  if (transformed.components && typeof transformed.components === 'object') {
+    const schemes = transformed.components.securitySchemes as Record<string, SecurityScheme> | undefined
+    if (schemes && Object.keys(schemes).length > 0) {
+      transformed.components.securitySchemes = buildSecuritySchemesExport(schemes)
+    }
+  }
+
   return transformed
+}
+
+// ─── Security schemes → OpenAPI (WP-032) ─────────────────────────────────────
+
+function buildSecuritySchemesExport(
+  schemes: Record<string, SecurityScheme>,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {}
+  for (const [name, scheme] of Object.entries(schemes)) {
+    if (scheme.type === 'apiKey') {
+      const s = scheme as SecuritySchemeApiKey
+      result[name] = { type: 'apiKey', in: s.in, name: s.name }
+    } else if (scheme.type === 'http') {
+      const s = scheme as SecuritySchemeHttp
+      const entry: Record<string, unknown> = { type: 'http', scheme: s.scheme }
+      if (s.bearerFormat) entry.bearerFormat = s.bearerFormat
+      result[name] = entry
+    } else {
+      // Preserve unsupported types as-is
+      result[name] = scheme
+    }
+  }
+  return result
 }
 
 // ─── Request body → OpenAPI requestBody (WP-026) ─────────────────────────────

@@ -5,7 +5,7 @@
  */
 
 import YAML from 'js-yaml'
-import { OpenAPISpecification, QueryParameter, ScalarQueryParameter, ObjectQueryParameter, ArrayQueryParameter, QueryParamScalarType, QueryParamItemType, RequestBody, BodyParameter, ScalarBodyParameter, ObjectBodyParameter, ArrayBodyParameter, BodyParamScalarType, BodyParamItemType, BODY_ELIGIBLE_METHODS, HTTPMethod, MEDIA_TYPE_OPTIONS } from '../types'
+import { OpenAPISpecification, QueryParameter, ScalarQueryParameter, ObjectQueryParameter, ArrayQueryParameter, QueryParamScalarType, QueryParamItemType, RequestBody, BodyParameter, ScalarBodyParameter, ObjectBodyParameter, ArrayBodyParameter, BodyParamScalarType, BodyParamItemType, BODY_ELIGIBLE_METHODS, HTTPMethod, MEDIA_TYPE_OPTIONS, OperationSecurityRequirement } from '../types'
 
 export interface ValidationError {
   field: string
@@ -137,7 +137,8 @@ export function loadOpenAPIFile(fileContent: string, fileName: string): LoadResu
 
     // Convert OpenAPI query parameters to internal format (WP-011/WP-019)
     // Convert OpenAPI requestBody to internal format
-    const transformedContent = importRequestBody(importQueryParameters(spec))
+    // Convert OpenAPI security to internal format (WP-033)
+    const transformedContent = importSecurity(importRequestBody(importQueryParameters(spec)))
 
     const specification: OpenAPISpecification = {
       id,
@@ -295,6 +296,42 @@ function importRequestBody(content: Record<string, any>): Record<string, any> {
 
 const SCALAR_TYPES = new Set<string>(['string', 'number', 'integer', 'boolean'])
 const HTTP_METHODS = ['get', 'post', 'put', 'delete', 'patch', 'head', 'options']
+
+// ─── Import: OpenAPI security → internal _security (WP-033) ──────────────────
+
+/**
+ * Walk all operations and convert `security` arrays into `_security` using
+ * the scheme name as the key. Preserves `components.securitySchemes` as-is.
+ */
+function importSecurity(content: Record<string, any>): Record<string, any> {
+  const result = JSON.parse(JSON.stringify(content)) as Record<string, any>
+
+  if (!result.paths || typeof result.paths !== 'object') return result
+
+  for (const method of HTTP_METHODS) {
+    for (const pathObj of Object.values(result.paths) as any[]) {
+      const operation = pathObj[method]
+      if (!operation || typeof operation !== 'object') continue
+
+      const securityArr: any[] = Array.isArray(operation.security) ? operation.security : []
+      if (securityArr.length > 0) {
+        // Each entry is a { schemeName: [] } object per OpenAPI spec
+        const internal: OperationSecurityRequirement[] = []
+        for (const entry of securityArr) {
+          if (typeof entry === 'object' && entry !== null) {
+            for (const schemeName of Object.keys(entry)) {
+              internal.push({ schemeName })
+            }
+          }
+        }
+        operation._security = internal
+        delete operation.security
+      }
+    }
+  }
+
+  return result
+}
 
 /**
  * Walk all operations and move `in: "query"` parameters into `_queryParams`.
