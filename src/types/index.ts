@@ -105,3 +105,49 @@ export interface ArrayQueryParameter extends QueryParameterBase {
 }
 
 export type QueryParameter = ScalarQueryParameter | ObjectQueryParameter | ArrayQueryParameter
+
+// ─── Request Body Types (WP-022, WP-023, WP-024, WP-025) ─────────────────────
+
+export const BODY_ELIGIBLE_METHODS: HTTPMethod[] = ['PUT', 'POST', 'PATCH']
+
+export const MEDIA_TYPE_OPTIONS = [
+  'application/json',
+  'application/x-www-form-urlencoded',
+  'multipart/form-data',
+  'text/plain',
+  'application/octet-stream',
+] as const
+
+export type BodyParamScalarType = 'string' | 'number' | 'integer' | 'boolean'
+export type BodyParamItemType = 'string' | 'number' | 'integer' | 'boolean' | 'object'
+export type BodyParamType = BodyParamScalarType | 'object' | 'array'
+
+export interface BodyParameterBase {
+  name: string
+  required?: boolean
+  description?: string
+}
+
+export interface ScalarBodyParameter extends BodyParameterBase {
+  type: BodyParamScalarType
+}
+
+export interface ObjectBodyParameter extends BodyParameterBase {
+  type: 'object'
+  properties: BodyParameter[]
+}
+
+export interface ArrayBodyParameter extends BodyParameterBase {
+  type: 'array'
+  itemType: BodyParamItemType
+  itemProperties?: BodyParameter[]
+}
+
+export type BodyParameter = ScalarBodyParameter | ObjectBodyParameter | ArrayBodyParameter
+
+export interface RequestBody {
+  description?: string
+  required: boolean
+  mediaType: string
+  properties: BodyParameter[]
+}

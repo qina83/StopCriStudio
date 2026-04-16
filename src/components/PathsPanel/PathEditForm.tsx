@@ -7,7 +7,7 @@
  */
 
 import React, { useState, useRef, useEffect } from 'react'
-import { HTTPMethod, PathOperation, PathParameter, ParameterType, QueryParameter } from '../../types'
+import { HTTPMethod, PathOperation, PathParameter, ParameterType, QueryParameter, RequestBody, BODY_ELIGIBLE_METHODS } from '../../types'
 import {
   syncParametersWithPath,
   findDuplicateParameterNames,
@@ -15,6 +15,7 @@ import {
   validatePathFormat,
 } from '../../utils/pathParameterUtils'
 import { QueryParametersPanel } from '../QueryParameters/QueryParametersPanel'
+import { RequestBodyPanel } from '../RequestBody/RequestBodyPanel'
 
 const HTTP_METHODS: HTTPMethod[] = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
 const PARAMETER_TYPES: ParameterType[] = ['string', 'number', 'integer', 'boolean']
@@ -33,6 +34,9 @@ interface PathEditFormProps {
   // WP-011: Query parameters support
   getQueryParameters?: (method: HTTPMethod) => QueryParameter[]
   onQueryParametersChange?: (method: HTTPMethod, parameters: QueryParameter[]) => void
+  // WP-022: Request body support
+  getRequestBody?: (method: HTTPMethod) => RequestBody | undefined
+  onRequestBodyChange?: (method: HTTPMethod, body: RequestBody) => void
 }
 
 /**
@@ -144,6 +148,8 @@ export function PathEditForm({
   onPathParameterUpdate,
   getQueryParameters,
   onQueryParametersChange,
+  getRequestBody,
+  onRequestBodyChange,
 }: PathEditFormProps) {
   const [selectedOperation, setSelectedOperation] = useState<HTTPMethod | null>(null)
   const [showAddConfirmModal, setShowAddConfirmModal] = useState(false)
@@ -582,6 +588,16 @@ export function PathEditForm({
               method={selectedOperation}
               parameters={getQueryParameters(selectedOperation)}
               onChange={(params) => onQueryParametersChange(selectedOperation, params)}
+            />
+          )}
+
+          {/* WP-022: Request Body section — only for PUT, POST, PATCH */}
+          {getRequestBody && onRequestBodyChange && BODY_ELIGIBLE_METHODS.includes(selectedOperation) && (
+            <RequestBodyPanel
+              pathName={pathName}
+              method={selectedOperation}
+              body={getRequestBody(selectedOperation) ?? { required: false, mediaType: 'application/json', properties: [] }}
+              onChange={(body) => onRequestBodyChange(selectedOperation, body)}
             />
           )}
         </div>

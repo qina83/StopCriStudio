@@ -5,7 +5,7 @@
  */
 
 import YAML from 'js-yaml'
-import { OpenAPISpecification, QueryParameter, ScalarQueryParameter, ObjectQueryParameter, ArrayQueryParameter, QueryParamScalarType, QueryParamItemType } from '../types'
+import { OpenAPISpecification, QueryParameter, ScalarQueryParameter, ObjectQueryParameter, ArrayQueryParameter, QueryParamScalarType, QueryParamItemType, RequestBody, BodyParameter, ScalarBodyParameter, ObjectBodyParameter, ArrayBodyParameter, BodyParamScalarType, BodyParamItemType, BODY_ELIGIBLE_METHODS, HTTPMethod, MEDIA_TYPE_OPTIONS } from '../types'
 
 export interface ValidationError {
   field: string
@@ -136,7 +136,8 @@ export function loadOpenAPIFile(fileContent: string, fileName: string): LoadResu
     const id = `spec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
 
     // Convert OpenAPI query parameters to internal format (WP-011/WP-019)
-    const transformedContent = importQueryParameters(spec)
+    // Convert OpenAPI requestBody to internal format
+    const transformedContent = importRequestBody(importQueryParameters(spec))
 
     const specification: OpenAPISpecification = {
       id,
@@ -163,6 +164,131 @@ export function loadOpenAPIFile(fileContent: string, fileName: string): LoadResu
       ],
     }
   }
+}
+
+// ─── Import: OpenAPI requestBody → internal _requestBody ───────────────────────
+
+const BODY_SCALAR_TYPES = new Set<string>(['string', 'number', 'integer', 'boolean'])
+const SUPPORTED_MEDIA_TYPES = new Set<string>(MEDIA_TYPE_OPTIONS as unknown as string[])
+
+function openAPISchemaToBodyParam(
+  name: string,
+  schema: any,
+  required: boolean,
+): BodyParameter {
+  const type = schema.type ?? 'string'
+
+  if (type === 'object') {
+    const properties: BodyParameter[] = []
+    if (schema.properties && typeof schema.properties === 'object') {
+      const requiredFields: string[] = Array.isArray(schema.required) ? schema.required : []
+      for (const [propName, propSchema] of Object.entries(schema.properties)) {
+        properties.push(
+          openAPISchemaToBodyParam(propName, propSchema as any, requiredFields.includes(propName)),
+        )
+      }
+    }
+    return {
+      name,
+      type: 'object',
+      ...(required ? { required } : {}),
+      ...(schema.description ? { description: schema.description } : {}),
+      properties,
+    } as ObjectBodyParameter
+  }
+
+  if (type === 'array') {
+    const items = schema.items || {}
+    const itemType: BodyParamItemType = BODY_SCALAR_TYPES.has(items.type)
+      ? (items.type as BodyParamItemType)
+      : items.type === 'object' ? 'object' : 'string'
+
+    const itemProperties: BodyParameter[] = []
+    if (itemType === 'object' && items.properties && typeof items.properties === 'object') {
+      const requiredFields: string[] = Array.isArray(items.required) ? items.required : []
+      for (const [propName, propSchema] of Object.entries(items.properties)) {
+        itemProperties.push(
+          openAPISchemaToBodyParam(propName, propSchema as any, requiredFields.includes(propName)),
+        )
+      }
+    }
+    return {
+      name,
+      type: 'array',
+      itemType,
+      ...(required ? { required } : {}),
+      ...(schema.description ? { description: schema.description } : {}),
+      ...(itemType === 'object' && itemProperties.length > 0 ? { itemProperties } : {}),
+    } as ArrayBodyParameter
+  }
+
+  // Scalar
+  const scalarType: BodyParamScalarType = BODY_SCALAR_TYPES.has(type)
+    ? (type as BodyParamScalarType)
+    : 'string'
+  return {
+    name,
+    type: scalarType,
+    ...(required ? { required } : {}),
+    ...(schema.description ? { description: schema.description } : {}),
+  } as ScalarBodyParameter
+}
+
+function importRequestBody(content: Record<string, any>): Record<string, any> {
+  const result = JSON.parse(JSON.stringify(content)) as Record<string, any>
+
+  if (!result.paths || typeof result.paths !== 'object') return result
+
+  for (const pathObj of Object.values(result.paths)) {
+    for (const method of HTTP_METHODS) {
+      const operation = (pathObj as any)[method]
+      if (!operation || typeof operation !== 'object') continue
+
+      const methodUpper = method.toUpperCase() as HTTPMethod
+      if (!BODY_ELIGIBLE_METHODS.includes(methodUpper)) continue
+
+      const rb = operation.requestBody
+      if (!rb || typeof rb !== 'object') continue
+
+      // Find the first supported media type; fall back to the first available
+      const content = rb.content && typeof rb.content === 'object' ? rb.content : {}
+      const mediaTypes = Object.keys(content)
+      const mediaType =
+        mediaTypes.find((mt) => SUPPORTED_MEDIA_TYPES.has(mt)) ??
+        mediaTypes[0] ??
+        'application/json'
+
+      const schema = content[mediaType]?.schema ?? {}
+      const requiredFields: string[] = Array.isArray(schema.required) ? schema.required : []
+      const properties: BodyParameter[] = []
+
+      if (schema.properties && typeof schema.properties === 'object') {
+        for (const [propName, propSchema] of Object.entries(schema.properties)) {
+          properties.push(
+            openAPISchemaToBodyParam(
+              propName,
+              propSchema as any,
+              requiredFields.includes(propName),
+            ),
+          )
+        }
+      }
+
+      const requestBody: RequestBody = {
+        required: rb.required === true,
+        mediaType,
+        properties,
+        ...(typeof rb.description === 'string' && rb.description.trim()
+          ? { description: rb.description.trim() }
+          : {}),
+      }
+
+      operation._requestBody = requestBody
+      delete operation.requestBody
+    }
+  }
+
+  return result
 }
 
 // ─── Import: OpenAPI → internal _queryParams (WP-011/WP-019) ─────────────────

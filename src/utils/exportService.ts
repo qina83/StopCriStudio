@@ -1,5 +1,5 @@
 import { dump } from 'js-yaml'
-import { OpenAPISpecification, PathParameter, QueryParameter, ObjectQueryParameter, ArrayQueryParameter, ScalarQueryParameter } from '../types'
+import { OpenAPISpecification, PathParameter, QueryParameter, ObjectQueryParameter, ArrayQueryParameter, ScalarQueryParameter, RequestBody, BodyParameter, ObjectBodyParameter, ArrayBodyParameter, ScalarBodyParameter, BODY_ELIGIBLE_METHODS, HTTPMethod } from '../types'
 import { toOpenAPIParameters } from './pathParameterUtils'
 
 /**
@@ -73,6 +73,17 @@ function transformForExport(content: Record<string, any>): Record<string, any> {
 
           // Remove internal _queryParams property before export
           delete operation._queryParams
+
+          // WP-026: Export request body for eligible methods
+          const methodUpper = method.toUpperCase() as HTTPMethod
+          if (BODY_ELIGIBLE_METHODS.includes(methodUpper)) {
+            const requestBody: RequestBody | undefined = operation._requestBody
+            if (requestBody) {
+              operation.requestBody = buildRequestBodyExport(requestBody)
+            }
+          }
+          // Always remove internal _requestBody
+          delete operation._requestBody
         }
       })
 
@@ -82,6 +93,74 @@ function transformForExport(content: Record<string, any>): Record<string, any> {
   }
 
   return transformed
+}
+
+// ─── Request body → OpenAPI requestBody (WP-026) ─────────────────────────────
+
+function buildBodyParamSchema(param: BodyParameter): Record<string, unknown> {
+  if (param.type === 'object') {
+    const op = param as ObjectBodyParameter
+    const properties: Record<string, unknown> = {}
+    for (const prop of op.properties) {
+      properties[prop.name] = buildBodyParamSchema(prop)
+    }
+    const schema: Record<string, unknown> = { type: 'object' }
+    if (Object.keys(properties).length > 0) schema.properties = properties
+    if (param.description) schema.description = param.description
+    return schema
+  }
+
+  if (param.type === 'array') {
+    const ap = param as ArrayBodyParameter
+    let items: Record<string, unknown>
+    if (ap.itemType === 'object') {
+      const itemProperties: Record<string, unknown> = {}
+      for (const prop of ap.itemProperties ?? []) {
+        itemProperties[prop.name] = buildBodyParamSchema(prop)
+      }
+      items = Object.keys(itemProperties).length > 0
+        ? { type: 'object', properties: itemProperties }
+        : { type: 'object' }
+    } else {
+      items = { type: ap.itemType }
+    }
+    const schema: Record<string, unknown> = { type: 'array', items }
+    if (param.description) schema.description = param.description
+    return schema
+  }
+
+  // Scalar
+  const sp = param as ScalarBodyParameter
+  const schema: Record<string, unknown> = { type: sp.type }
+  if (sp.description) schema.description = sp.description
+  return schema
+}
+
+function buildRequestBodyExport(body: RequestBody): Record<string, unknown> {
+  const properties: Record<string, unknown> = {}
+  const requiredProps: string[] = []
+
+  for (const prop of body.properties) {
+    properties[prop.name] = buildBodyParamSchema(prop)
+    if (prop.required) requiredProps.push(prop.name)
+  }
+
+  const schema: Record<string, unknown> = { type: 'object' }
+  if (Object.keys(properties).length > 0) schema.properties = properties
+  if (requiredProps.length > 0) schema.required = requiredProps
+
+  const result: Record<string, unknown> = {
+    required: body.required,
+    content: {
+      [body.mediaType]: { schema },
+    },
+  }
+
+  if (body.description && body.description.trim()) {
+    result.description = body.description.trim()
+  }
+
+  return result
 }
 
 // ─── Query parameter → OpenAPI schema (WP-020) ────────────────────────────────

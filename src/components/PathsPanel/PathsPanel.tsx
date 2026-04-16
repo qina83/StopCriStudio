@@ -5,7 +5,7 @@
  */
 
 import React, { useState } from 'react'
-import { OpenAPISpecification, HTTPMethod, PathOperation, PathParameter, QueryParameter } from '../../types'
+import { OpenAPISpecification, HTTPMethod, PathOperation, PathParameter, QueryParameter, RequestBody } from '../../types'
 import { PathEditForm } from './PathEditForm'
 
 const HTTP_METHODS: HTTPMethod[] = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
@@ -347,6 +347,45 @@ export function PathsPanel({
     }
   }
 
+  // WP-022: Request body handlers
+  const getRequestBodyForOperation = (method: HTTPMethod): RequestBody | undefined => {
+    if (!selectedPath) return undefined
+    const paths = (specification.content.paths as Record<string, any>) || {}
+    const pathObj = paths[selectedPath] || {}
+    const operation = pathObj[method.toLowerCase()]
+    return operation?._requestBody
+  }
+
+  const handleRequestBodyChange = (method: HTTPMethod, body: RequestBody) => {
+    if (selectedPath) {
+      const updateFn = onUpdateSpecificationAndSave || onUpdateSpecification
+      if (updateFn) {
+        updateFn((spec) => {
+          const paths = (spec.content.paths as Record<string, any>) || {}
+          const pathObj = paths[selectedPath] || {}
+          const operation = pathObj[method.toLowerCase()] || {}
+          return {
+            ...spec,
+            content: {
+              ...spec.content,
+              paths: {
+                ...paths,
+                [selectedPath]: {
+                  ...pathObj,
+                  [method.toLowerCase()]: {
+                    ...operation,
+                    _requestBody: body,
+                  },
+                },
+              },
+            },
+            updatedAt: Date.now(),
+          }
+        })
+      }
+    }
+  }
+
   return (
     <div className="p-8 bg-white flex-1 overflow-y-auto">
       <div className="max-w-4xl">
@@ -364,6 +403,8 @@ export function PathsPanel({
             onPathParameterUpdate={handlePathParameterUpdate}
             getQueryParameters={getQueryParametersForOperation}
             onQueryParametersChange={handleQueryParametersChange}
+            getRequestBody={getRequestBodyForOperation}
+            onRequestBodyChange={handleRequestBodyChange}
           />
         ) : (
           <>
