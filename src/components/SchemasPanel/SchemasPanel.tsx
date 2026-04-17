@@ -20,6 +20,7 @@ interface SchemasPanelProps {
   onUpdateSpecification?: (updater: (spec: OpenAPISpecification) => OpenAPISpecification) => void
   selectedSchemaName?: string | null
   onSelectedSchemaChange?: (schemaName: string | null) => void
+  mode?: 'full' | 'modal-only'
 }
 
 type EditorMode = 'create' | 'edit'
@@ -156,6 +157,7 @@ export function SchemasPanel({
   onUpdateSpecification,
   selectedSchemaName,
   onSelectedSchemaChange,
+  mode = 'full',
 }: SchemasPanelProps) {
   const components = (specification.content.components as Record<string, unknown>) || {}
   const schemas = (components.schemas as Record<string, unknown>) || {}
@@ -240,6 +242,9 @@ export function SchemasPanel({
 
   const closeEditor = () => {
     setEditor((prev) => ({ ...prev, open: false, error: null }))
+    if (mode === 'modal-only') {
+      onSelectedSchemaChange?.(null)
+    }
   }
 
   const saveSchema = () => {
@@ -354,6 +359,47 @@ export function SchemasPanel({
   }
 
   return (
+    mode === 'modal-only' ? (
+      <>
+        <SchemaEditorModal
+          state={editor}
+          existingNames={sortStringsCaseInsensitiveStable(Object.keys(schemas))}
+          schemas={schemas}
+          onClose={closeEditor}
+          onChange={setEditor}
+          onSave={saveSchema}
+        />
+
+        {deleteName && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setDeleteName(null)}>
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm" onClick={(e) => e.stopPropagation()}>
+              <div className="bg-red-600 text-white px-6 py-4 rounded-t-xl">
+                <h3 className="text-xl font-bold">Delete Schema</h3>
+              </div>
+              <div className="p-6">
+                <p className="text-slate-700">
+                  Delete schema <span className="font-mono font-semibold">{deleteName}</span>? This cannot be undone.
+                </p>
+              </div>
+              <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-3 rounded-b-xl">
+                <button
+                  onClick={() => setDeleteName(null)}
+                  className="px-4 py-2 text-slate-700 hover:bg-slate-200 rounded-lg font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmDelete}
+                  className="px-4 py-2 bg-red-600 text-white hover:bg-red-700 rounded-lg font-medium transition-colors"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+    ) : (
     <div className="p-8 bg-white flex-1 overflow-y-auto">
       <div className="max-w-4xl">
         <div className="flex items-center justify-between mb-1">
@@ -493,5 +539,6 @@ export function SchemasPanel({
         )}
       </div>
     </div>
+    )
   )
 }

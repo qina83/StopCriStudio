@@ -25,6 +25,7 @@ export function SpecificationEditor({ specification, onBack }: SpecificationEdit
   const [pathViewMode, setPathViewMode] = useState<PathViewMode>('list') // WP-002.1
   const [selectedPath, setSelectedPath] = useState<string | null>(null) // Track selected path from sidebar
   const [selectedSchema, setSelectedSchema] = useState<string | null>(null)
+  const [quickEditSchemaName, setQuickEditSchemaName] = useState<string | null>(null)
   const [isExporting, setIsExporting] = useState(false)
   const { specification: spec, updateInfo, updateSpecification, updateSpecificationAndSave, isSaving } = useSpecification(specification)
 
@@ -64,6 +65,10 @@ export function SpecificationEditor({ specification, onBack }: SpecificationEdit
     setActiveItem('schemas')
   }
 
+  const handleSchemaQuickEdit = (schemaName: string) => {
+    setQuickEditSchemaName(schemaName)
+  }
+
   // Handle switching path view mode (WP-002.1)
   const handlePathViewModeChange = (mode: PathViewMode) => {
     setPathViewMode(mode)
@@ -83,7 +88,7 @@ export function SpecificationEditor({ specification, onBack }: SpecificationEdit
             onViewModeChange={handlePathViewModeChange}
             selectedPath={selectedPath}
             onSelectedPathChange={setSelectedPath}
-            onOpenSchemaRef={handleSchemaSelect}
+            onOpenSchemaRef={handleSchemaQuickEdit}
           />
         )
       case 'schemas':
@@ -173,6 +178,14 @@ export function SpecificationEditor({ specification, onBack }: SpecificationEdit
 
         {/* Content panel */}
         {renderContent()}
+
+        <SchemasPanel
+          mode="modal-only"
+          specification={spec}
+          onUpdateSpecification={updateSpecificationAndSave || updateSpecification}
+          selectedSchemaName={quickEditSchemaName}
+          onSelectedSchemaChange={setQuickEditSchemaName}
+        />
       </div>
     </div>
   )
