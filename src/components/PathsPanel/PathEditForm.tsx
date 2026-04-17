@@ -38,6 +38,7 @@ interface PathEditFormProps {
   // WP-022: Request body support
   getRequestBody?: (method: HTTPMethod) => RequestBody | undefined
   onRequestBodyChange?: (method: HTTPMethod, body: RequestBody) => void
+  schemas?: Record<string, unknown>
   // WP-027: Security support
   getOperationSecurity?: (method: HTTPMethod) => OperationSecurityRequirement[]
   getSecuritySchemes?: () => Record<string, SecurityScheme>
@@ -160,6 +161,7 @@ export function PathEditForm({
   onQueryParametersChange,
   getRequestBody,
   onRequestBodyChange,
+  schemas = {},
   getOperationSecurity,
   getSecuritySchemes,
   getOtherOperationsSchemeNames,
@@ -612,6 +614,7 @@ export function PathEditForm({
               method={selectedOperation}
               body={getRequestBody(selectedOperation) ?? { required: false, mediaType: 'application/json', properties: [] }}
               onChange={(body) => onRequestBodyChange(selectedOperation, body)}
+              schemas={schemas}
             />
           )}
 

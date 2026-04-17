@@ -4,7 +4,7 @@
  * Implements WP-022, WP-023, WP-024, WP-025
  */
 
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import {
   RequestBody,
   BodyParameter,
@@ -15,6 +15,11 @@ import {
   ScalarBodyParameter,
   MEDIA_TYPE_OPTIONS,
 } from '../../types'
+import {
+  buildSchemaRef,
+  getSchemaNameFromRef,
+  parseEditableObjectSchema,
+} from '../../utils/schemaUtils'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -39,7 +44,11 @@ const METHOD_COLORS: Record<string, string> = {
 // ─── Tree path helpers ────────────────────────────────────────────────────────
 
 function getNodeChildren(param: BodyParameter): BodyParameter[] | undefined {
-  if (param.type === 'object') return (param as ObjectBodyParameter).properties
+  if (param.type === 'object') {
+    const op = param as ObjectBodyParameter
+    if (op.ref) return undefined
+    return op.properties
+  }
   if (param.type === 'array' && (param as ArrayBodyParameter).itemType === 'object')
     return (param as ArrayBodyParameter).itemProperties ?? []
   return undefined
@@ -107,6 +116,9 @@ interface FormState {
   required: boolean
   description: string
   itemType: BodyParamItemType
+  objectMode: 'inline' | 'ref'
+  schemaRefName: string
+  schemaSearch: string
 }
 
 interface FormErrors {
@@ -114,26 +126,64 @@ interface FormErrors {
 }
 
 function blankForm(defaultType: BodyParamType = 'string'): FormState {
-  return { name: '', type: defaultType, required: false, description: '', itemType: 'string' }
+  return {
+    name: '',
+    type: defaultType,
+    required: false,
+    description: '',
+    itemType: 'string',
+    objectMode: 'inline',
+    schemaRefName: '',
+    schemaSearch: '',
+  }
 }
 
 function paramToForm(param: BodyParameter): FormState {
   if (param.type === 'object') {
-    return { ...blankForm('object'), name: param.name, required: param.required ?? false, description: param.description ?? '' }
+    const op = param as ObjectBodyParameter
+    return {
+      ...blankForm('object'),
+      name: param.name,
+      required: param.required ?? false,
+      description: param.description ?? '',
+      objectMode: op.ref ? 'ref' : 'inline',
+      schemaRefName: op.ref ? (getSchemaNameFromRef(op.ref) ?? '') : '',
+    }
   }
   if (param.type === 'array') {
     const ap = param as ArrayBodyParameter
     return { ...blankForm('array'), name: param.name, required: param.required ?? false, description: param.description ?? '', itemType: ap.itemType }
   }
   return {
-    name: param.name, type: param.type, required: param.required ?? false,
-    description: param.description ?? '', itemType: 'string',
+    ...blankForm(param.type),
+    name: param.name,
+    type: param.type,
+    required: param.required ?? false,
+    description: param.description ?? '',
+    itemType: 'string',
   }
 }
 
 function formToParam(form: FormState, existingChildren?: BodyParameter[]): BodyParameter {
   if (form.type === 'object') {
-    return { name: form.name.trim(), type: 'object', ...(form.required ? { required: true } : {}), ...(form.description.trim() ? { description: form.description.trim() } : {}), properties: existingChildren ?? [] } as ObjectBodyParameter
+    if (form.objectMode === 'ref' && form.schemaRefName.trim()) {
+      return {
+        name: form.name.trim(),
+        type: 'object',
+        ref: buildSchemaRef(form.schemaRefName.trim()),
+        ...(form.required ? { required: true } : {}),
+        ...(form.description.trim() ? { description: form.description.trim() } : {}),
+        properties: [],
+      } as ObjectBodyParameter
+    }
+
+    return {
+      name: form.name.trim(),
+      type: 'object',
+      ...(form.required ? { required: true } : {}),
+      ...(form.description.trim() ? { description: form.description.trim() } : {}),
+      properties: existingChildren ?? [],
+    } as ObjectBodyParameter
   }
   if (form.type === 'array') {
     return { name: form.name.trim(), type: 'array', itemType: form.itemType, ...(form.required ? { required: true } : {}), ...(form.description.trim() ? { description: form.description.trim() } : {}), ...(form.itemType === 'object' ? { itemProperties: existingChildren ?? [] } : {}) } as ArrayBodyParameter
@@ -151,6 +201,11 @@ function validateForm(form: FormState, siblings: BodyParameter[], editingName?: 
     const duplicate = siblings.some(s => s.name === form.name.trim() && s.name !== editingName)
     if (duplicate) errors.name = 'A property with this name already exists at this level'
   }
+
+  if (form.type === 'object' && form.objectMode === 'ref' && !form.schemaRefName.trim()) {
+    errors.name = errors.name ?? 'Select a schema reference before saving'
+  }
+
   return errors
 }
 
@@ -160,12 +215,23 @@ interface EditModalProps {
   title: string
   form: FormState
   errors: FormErrors
+  availableSchemaNames: string[]
+  isSchemaMode: boolean
   onFormChange: (form: FormState) => void
   onSave: () => void
   onCancel: () => void
 }
 
-function ParamEditModal({ title, form, errors, onFormChange, onSave, onCancel }: EditModalProps) {
+function ParamEditModal({
+  title,
+  form,
+  errors,
+  availableSchemaNames,
+  isSchemaMode,
+  onFormChange,
+  onSave,
+  onCancel,
+}: EditModalProps) {
   const set = (partial: Partial<FormState>) => onFormChange({ ...form, ...partial })
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -200,11 +266,76 @@ function ParamEditModal({ title, form, errors, onFormChange, onSave, onCancel }:
             <select
               className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={form.type}
-              onChange={e => set({ type: e.target.value as BodyParamType, itemType: 'string' })}
+              onChange={e => set({ type: e.target.value as BodyParamType, itemType: 'string', objectMode: 'inline', schemaRefName: '', schemaSearch: '' })}
             >
               {ALL_PARAM_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
           </div>
+
+          {/* Object mode selector for WP-037 */}
+          {form.type === 'object' && !isSchemaMode && (
+            <div className="space-y-2">
+              <label className="block text-sm font-semibold text-slate-700">Object Definition Mode</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (form.objectMode === 'ref' && form.schemaRefName.trim()) {
+                      const confirmed = window.confirm('Switching to inline mode clears the selected schema reference. Continue?')
+                      if (!confirmed) return
+                    }
+                    set({ objectMode: 'inline', schemaRefName: '', schemaSearch: '' })
+                  }}
+                  className={`px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${form.objectMode === 'inline' ? 'bg-blue-50 border-blue-400 text-blue-700' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'}`}
+                >
+                  Define inline
+                </button>
+                <button
+                  type="button"
+                  onClick={() => set({ objectMode: 'ref' })}
+                  disabled={availableSchemaNames.length === 0}
+                  title={availableSchemaNames.length === 0 ? 'Create a schema in the Schemas panel first.' : undefined}
+                  className={`px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${form.objectMode === 'ref' ? 'bg-blue-50 border-blue-400 text-blue-700' : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'} ${availableSchemaNames.length === 0 ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                  Use schema reference ($ref)
+                </button>
+              </div>
+
+              {form.objectMode === 'ref' && (
+                <div className="space-y-2">
+                  {availableSchemaNames.length > 5 && (
+                    <input
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      value={form.schemaSearch}
+                      onChange={e => set({ schemaSearch: e.target.value })}
+                      placeholder="Search schemas..."
+                    />
+                  )}
+                  <select
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                    value={form.schemaRefName}
+                    onChange={e => set({ schemaRefName: e.target.value })}
+                  >
+                    <option value="">Select a schema...</option>
+                    {availableSchemaNames
+                      .filter(name =>
+                        form.schemaSearch.trim()
+                          ? name.toLowerCase().includes(form.schemaSearch.trim().toLowerCase())
+                          : true,
+                      )
+                      .map(name => (
+                        <option key={name} value={name}>{name}</option>
+                      ))}
+                  </select>
+                  {availableSchemaNames.length === 0 && (
+                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                      No schemas available. Create one in the Schemas panel first.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Array item type */}
           {form.type === 'array' && (
@@ -277,12 +408,14 @@ interface TreeRowProps {
   depth: number
   isExpandable: boolean
   isExpanded: boolean
+  readOnly?: boolean
+  schemaRefLabel?: string
   onToggle: () => void
   onEdit: () => void
   onDelete: () => void
 }
 
-function TreeRow({ param, depth, isExpandable, isExpanded, onToggle, onEdit, onDelete }: TreeRowProps) {
+function TreeRow({ param, depth, isExpandable, isExpanded, readOnly = false, schemaRefLabel, onToggle, onEdit, onDelete }: TreeRowProps) {
   const indent = depth * 20
   return (
     <div className="flex items-center gap-2 py-2 px-3 rounded-lg hover:bg-slate-50 group" style={{ paddingLeft: `${12 + indent}px` }}>
@@ -295,31 +428,38 @@ function TreeRow({ param, depth, isExpandable, isExpanded, onToggle, onEdit, onD
       </button>
       <span className="font-mono font-semibold text-slate-900 flex-1 truncate min-w-0">{param.name}</span>
       <TypeBadge param={param} />
+      {schemaRefLabel && (
+        <span className="text-[11px] font-mono text-blue-700 bg-blue-50 border border-blue-200 rounded px-1.5 py-0.5 flex-shrink-0">
+          {schemaRefLabel}
+        </span>
+      )}
       {param.required && (
         <span className="text-xs font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-200 flex-shrink-0">
           required
         </span>
       )}
-      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-        <button
-          onClick={onEdit}
-          className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-          title="Edit"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-          </svg>
-        </button>
-        <button
-          onClick={onDelete}
-          className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-          title="Delete"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-          </svg>
-        </button>
-      </div>
+      {!readOnly && (
+        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+          <button
+            onClick={onEdit}
+            className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+            title="Edit"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+          </button>
+          <button
+            onClick={onDelete}
+            className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+            title="Delete"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -369,6 +509,8 @@ interface RequestBodyPanelProps {
   method: string
   body: RequestBody
   onChange: (body: RequestBody) => void
+  schemas?: Record<string, unknown>
+  mode?: 'requestBody' | 'schema'
 }
 
 interface ModalState {
@@ -377,15 +519,19 @@ interface ModalState {
   path: number[]
   form: FormState
   errors: FormErrors
+  originalName?: string
 }
 
-export function RequestBodyPanel({ pathName, method, body, onChange }: RequestBodyPanelProps) {
+export function RequestBodyPanel({ pathName, method, body, onChange, schemas = {}, mode = 'requestBody' }: RequestBodyPanelProps) {
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set())
   const [modal, setModal] = useState<ModalState>({ open: false, mode: 'add', path: [], form: blankForm(), errors: {} })
   const [confirmDeletePath, setConfirmDeletePath] = useState<number[] | null>(null)
   const [pendingMediaType, setPendingMediaType] = useState<string | null>(null)
   const [customMediaType, setCustomMediaType] = useState('')
   const [showCustomInput, setShowCustomInput] = useState(false)
+
+  const schemaNames = useMemo(() => Object.keys(schemas).sort((a, b) => a.localeCompare(b)), [schemas])
+  const isSchemaMode = mode === 'schema'
 
   const methodColor = METHOD_COLORS[method.toUpperCase()] ?? 'bg-slate-100 text-slate-800'
 
@@ -402,14 +548,14 @@ export function RequestBodyPanel({ pathName, method, body, onChange }: RequestBo
   }
 
   const openEditModal = (param: BodyParameter, path: number[]) => {
-    setModal({ open: true, mode: 'edit', path, form: paramToForm(param), errors: {} })
+    setModal({ open: true, mode: 'edit', path, form: paramToForm(param), errors: {}, originalName: param.name })
   }
 
   const closeModal = () => setModal(m => ({ ...m, open: false }))
 
   const handleModalSave = () => {
     const siblings = getChildrenAtPath(body.properties, modal.mode === 'add' ? modal.path : modal.path.slice(0, -1))
-    const editingName = modal.mode === 'edit' ? modal.form.name : undefined
+    const editingName = modal.mode === 'edit' ? modal.originalName : undefined
     const errors = validateForm(modal.form, siblings, editingName)
 
     if (Object.keys(errors).length > 0) {
@@ -473,14 +619,30 @@ export function RequestBodyPanel({ pathName, method, body, onChange }: RequestBo
     setCustomMediaType('')
   }
 
+  const getReferencePreviewChildren = (ref: string): BodyParameter[] => {
+    const schemaName = getSchemaNameFromRef(ref)
+    if (!schemaName) return []
+
+    const schema = schemas[schemaName]
+    if (!schema) return []
+
+    const parsed = parseEditableObjectSchema(schema)
+    return parsed.editable ? parsed.properties : []
+  }
+
   const renderTree = (params: BodyParameter[], parentPath: number[], depth: number): React.ReactNode => {
     return params.map((param, index) => {
       const path = [...parentPath, index]
       const nodeKey = path.join('.')
-      const children = getNodeChildren(param)
+      const refValue = param.type === 'object' ? (param as ObjectBodyParameter).ref : undefined
+      const refChildren = refValue ? getReferencePreviewChildren(refValue) : undefined
+      const children = refChildren ?? getNodeChildren(param)
+      const isRefPreview = !!refValue
       const isExpandable = children !== undefined
       const isExpanded = expandedNodes.has(nodeKey)
       const addChildLabel = param.type === 'array' ? 'Add item property' : 'Add property'
+      const schemaName = refValue ? getSchemaNameFromRef(refValue) : null
+      const schemaRefLabel = schemaName ? `$ref: ${schemaName}` : undefined
 
       return (
         <React.Fragment key={nodeKey}>
@@ -489,21 +651,32 @@ export function RequestBodyPanel({ pathName, method, body, onChange }: RequestBo
             depth={depth}
             isExpandable={isExpandable}
             isExpanded={isExpanded}
+            readOnly={isRefPreview}
+            schemaRefLabel={schemaRefLabel}
             onToggle={() => toggleExpand(nodeKey)}
             onEdit={() => openEditModal(param, path)}
             onDelete={() => handleDelete(path)}
           />
           {isExpanded && isExpandable && (
             <>
+              {isRefPreview && (
+                <div style={{ paddingLeft: `${12 + (depth + 1) * 20 + 28}px` }} className="pb-2">
+                  <p className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded px-2 py-1 inline-block">
+                    Referenced schema is read-only here. Edit it in the Schemas panel.
+                  </p>
+                </div>
+              )}
               {children!.length > 0
                 ? renderTree(children!, path, depth + 1)
                 : (
                   <div style={{ paddingLeft: `${12 + (depth + 1) * 20 + 28}px` }} className="py-1">
-                    <span className="text-xs text-slate-400 italic">No properties yet</span>
+                    <span className="text-xs text-slate-400 italic">
+                      {isRefPreview ? 'No preview available for this schema' : 'No properties yet'}
+                    </span>
                   </div>
                 )
               }
-              <AddChildRow depth={depth + 1} label={addChildLabel} onClick={() => openAddModal(path)} />
+              {!isRefPreview && <AddChildRow depth={depth + 1} label={addChildLabel} onClick={() => openAddModal(path)} />}
             </>
           )}
         </React.Fragment>
@@ -515,94 +688,98 @@ export function RequestBodyPanel({ pathName, method, body, onChange }: RequestBo
 
   return (
     <div className="mt-4 border border-slate-200 rounded-lg overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 bg-slate-50 border-b border-slate-200">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className="text-sm font-bold text-slate-700 flex-shrink-0">Request Body</span>
-          <span className={`text-xs font-bold px-2 py-0.5 rounded flex-shrink-0 ${methodColor}`}>
-            {method.toUpperCase()}
-          </span>
-          <span className="text-xs font-mono text-slate-500 truncate">{pathName}</span>
-        </div>
-      </div>
-
-      {/* Body metadata (WP-023) */}
-      <div className="px-4 py-4 border-b border-slate-200 bg-white space-y-4">
-        {/* Description */}
-        <div>
-          <label className="block text-sm font-semibold text-slate-700 mb-1">Description</label>
-          <input
-            type="text"
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-            value={body.description ?? ''}
-            onChange={e => onChange({ ...body, description: e.target.value })}
-            placeholder="Describe the request body…"
-          />
-        </div>
-
-        {/* Required toggle */}
-        <label className="flex items-center gap-2 cursor-pointer select-none">
-          <input
-            type="checkbox"
-            checked={body.required}
-            onChange={e => onChange({ ...body, required: e.target.checked })}
-            className="w-4 h-4 accent-blue-600"
-          />
-          <span className="text-sm font-semibold text-slate-700">Required</span>
-        </label>
-      </div>
-
-      {/* Media type selector (WP-024) */}
-      <div className="px-4 py-3 border-b border-slate-200 bg-white">
-        <label className="block text-sm font-semibold text-slate-700 mb-1">Media Type</label>
-        {showCustomInput ? (
-          <div className="flex gap-2">
-            <input
-              type="text"
-              className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-mono"
-              value={customMediaType}
-              onChange={e => setCustomMediaType(e.target.value)}
-              placeholder="e.g. application/vnd.api+json"
-              autoFocus
-              onKeyDown={e => {
-                if (e.key === 'Enter') handleCustomMediaTypeConfirm()
-                if (e.key === 'Escape') { setShowCustomInput(false); setCustomMediaType('') }
-              }}
-            />
-            <button
-              onClick={handleCustomMediaTypeConfirm}
-              className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium transition-colors"
-            >
-              Set
-            </button>
-            <button
-              onClick={() => { setShowCustomInput(false); setCustomMediaType('') }}
-              className="px-3 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm font-medium transition-colors"
-            >
-              Cancel
-            </button>
+      {!isSchemaMode && (
+        <>
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 bg-slate-50 border-b border-slate-200">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-sm font-bold text-slate-700 flex-shrink-0">Request Body</span>
+              <span className={`text-xs font-bold px-2 py-0.5 rounded flex-shrink-0 ${methodColor}`}>
+                {method.toUpperCase()}
+              </span>
+              <span className="text-xs font-mono text-slate-500 truncate">{pathName}</span>
+            </div>
           </div>
-        ) : (
-          <div className="flex gap-2 items-center">
-            <select
-              className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              value={isCustomMediaType ? '__custom_active__' : body.mediaType}
-              onChange={e => handleMediaTypeChange(e.target.value)}
-            >
-              {MEDIA_TYPE_OPTIONS.map(mt => (
-                <option key={mt} value={mt}>{mt}</option>
-              ))}
-              {isCustomMediaType && (
-                <option value="__custom_active__">{body.mediaType}</option>
-              )}
-              <option value="__custom__">Custom…</option>
-            </select>
-            {isCustomMediaType && (
-              <span className="text-xs text-slate-500 font-mono bg-slate-100 px-2 py-1 rounded">{body.mediaType}</span>
+
+          {/* Body metadata (WP-023) */}
+          <div className="px-4 py-4 border-b border-slate-200 bg-white space-y-4">
+            {/* Description */}
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1">Description</label>
+              <input
+                type="text"
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                value={body.description ?? ''}
+                onChange={e => onChange({ ...body, description: e.target.value })}
+                placeholder="Describe the request body…"
+              />
+            </div>
+
+            {/* Required toggle */}
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={body.required}
+                onChange={e => onChange({ ...body, required: e.target.checked })}
+                className="w-4 h-4 accent-blue-600"
+              />
+              <span className="text-sm font-semibold text-slate-700">Required</span>
+            </label>
+          </div>
+
+          {/* Media type selector (WP-024) */}
+          <div className="px-4 py-3 border-b border-slate-200 bg-white">
+            <label className="block text-sm font-semibold text-slate-700 mb-1">Media Type</label>
+            {showCustomInput ? (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm font-mono"
+                  value={customMediaType}
+                  onChange={e => setCustomMediaType(e.target.value)}
+                  placeholder="e.g. application/vnd.api+json"
+                  autoFocus
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') handleCustomMediaTypeConfirm()
+                    if (e.key === 'Escape') { setShowCustomInput(false); setCustomMediaType('') }
+                  }}
+                />
+                <button
+                  onClick={handleCustomMediaTypeConfirm}
+                  className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm font-medium transition-colors"
+                >
+                  Set
+                </button>
+                <button
+                  onClick={() => { setShowCustomInput(false); setCustomMediaType('') }}
+                  className="px-3 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <div className="flex gap-2 items-center">
+                <select
+                  className="flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  value={isCustomMediaType ? '__custom_active__' : body.mediaType}
+                  onChange={e => handleMediaTypeChange(e.target.value)}
+                >
+                  {MEDIA_TYPE_OPTIONS.map(mt => (
+                    <option key={mt} value={mt}>{mt}</option>
+                  ))}
+                  {isCustomMediaType && (
+                    <option value="__custom_active__">{body.mediaType}</option>
+                  )}
+                  <option value="__custom__">Custom…</option>
+                </select>
+                {isCustomMediaType && (
+                  <span className="text-xs text-slate-500 font-mono bg-slate-100 px-2 py-1 rounded">{body.mediaType}</span>
+                )}
+              </div>
             )}
           </div>
-        )}
-      </div>
+        </>
+      )}
 
       {/* Properties tree (WP-025) */}
       <div className="px-2 py-2 min-h-[60px]">
@@ -631,6 +808,8 @@ export function RequestBodyPanel({ pathName, method, body, onChange }: RequestBo
           title={modal.mode === 'add' ? 'Add Body Property' : 'Edit Body Property'}
           form={modal.form}
           errors={modal.errors}
+          availableSchemaNames={schemaNames}
+          isSchemaMode={isSchemaMode}
           onFormChange={form => setModal(m => ({ ...m, form, errors: {} }))}
           onSave={handleModalSave}
           onCancel={closeModal}

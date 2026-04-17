@@ -27,11 +27,6 @@ export function SpecificationEditor({ specification, onBack }: SpecificationEdit
   const [isExporting, setIsExporting] = useState(false)
   const { specification: spec, updateInfo, updateSpecification, updateSpecificationAndSave, isSaving } = useSpecification(specification)
 
-  const handleAddSchema = () => {
-    // TODO: Implement add schema dialog
-    console.log('Add schema')
-  }
-
   // Handle export specification as YAML (WP-004)
   const handleExport = async () => {
     setIsExporting(true)
@@ -85,7 +80,12 @@ export function SpecificationEditor({ specification, onBack }: SpecificationEdit
           />
         )
       case 'schemas':
-        return <SchemasPanel specification={spec} onAddSchema={handleAddSchema} />
+        return (
+          <SchemasPanel
+            specification={spec}
+            onUpdateSpecification={updateSpecificationAndSave || updateSpecification}
+          />
+        )
       default:
         return <InfoPanel specification={spec} onUpdate={updateInfo} isSaving={isSaving} />
     }

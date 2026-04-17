@@ -177,6 +177,17 @@ function openAPISchemaToBodyParam(
   schema: any,
   required: boolean,
 ): BodyParameter {
+  if (schema && typeof schema === 'object' && typeof schema.$ref === 'string') {
+    return {
+      name,
+      type: 'object',
+      ref: schema.$ref,
+      properties: [],
+      ...(required ? { required } : {}),
+      ...(schema.description ? { description: schema.description } : {}),
+    } as ObjectBodyParameter
+  }
+
   const type = schema.type ?? 'string'
 
   if (type === 'object') {

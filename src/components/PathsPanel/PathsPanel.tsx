@@ -59,6 +59,8 @@ export function PathsPanel({
   }
 
   const paths = (specification.content.paths as Record<string, any>) || {}
+  const components = (specification.content.components as Record<string, any>) || {}
+  const schemas = (components.schemas as Record<string, unknown>) || {}
   const pathCount = Object.keys(paths).length
 
   const getPathOperations = (path: string): Record<string, PathOperation> => {
@@ -473,6 +475,7 @@ export function PathsPanel({
             onQueryParametersChange={handleQueryParametersChange}
             getRequestBody={getRequestBodyForOperation}
             onRequestBodyChange={handleRequestBodyChange}
+            schemas={schemas}
             getOperationSecurity={getOperationSecurity}
             getSecuritySchemes={getSecuritySchemes}
             getOtherOperationsSchemeNames={getOtherOperationsSchemeNames}

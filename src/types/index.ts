@@ -165,6 +165,7 @@ export interface ScalarBodyParameter extends BodyParameterBase {
 export interface ObjectBodyParameter extends BodyParameterBase {
   type: 'object'
   properties: BodyParameter[]
+  ref?: string
 }
 
 export interface ArrayBodyParameter extends BodyParameterBase {
