@@ -80,6 +80,17 @@ function parseBodyParamFromSchema(name: string, schema: any, required: boolean):
 
   if (type === 'array') {
     const items = schema.items || {}
+    if (typeof items.$ref === 'string') {
+      return {
+        name,
+        type: 'array',
+        itemType: 'object',
+        itemRef: items.$ref,
+        ...(required ? { required: true } : {}),
+        ...(typeof schema.description === 'string' ? { description: schema.description } : {}),
+      } as ArrayBodyParameter
+    }
+
     const itemType: BodyParamItemType = SCALAR_TYPES.has(items.type)
       ? (items.type as BodyParamItemType)
       : 'object'
@@ -181,6 +192,9 @@ function buildSchemaFromBodyParam(param: BodyParameter): Record<string, unknown>
     const ap = param as ArrayBodyParameter
     let items: Record<string, unknown>
     if (ap.itemType === 'object') {
+      if (typeof ap.itemRef === 'string' && ap.itemRef.trim()) {
+        items = { $ref: ap.itemRef }
+      } else {
       const itemProperties: Record<string, unknown> = {}
       const itemRequired: string[] = []
       for (const child of ap.itemProperties ?? []) {
@@ -190,6 +204,7 @@ function buildSchemaFromBodyParam(param: BodyParameter): Record<string, unknown>
       items = { type: 'object' }
       if (Object.keys(itemProperties).length > 0) items.properties = itemProperties
       if (itemRequired.length > 0) items.required = itemRequired
+      }
     } else {
       items = { type: ap.itemType }
     }
@@ -241,6 +256,14 @@ function updateBodyParamRefs(params: BodyParameter[], oldRef: string, newRef: st
 
     if (param.type === 'array') {
       const ap = param as ArrayBodyParameter
+      if (ap.itemType === 'object' && typeof ap.itemRef === 'string') {
+        if (ap.itemRef === oldRef) {
+          count += 1
+          return { ...ap, itemRef: newRef }
+        }
+        return ap
+      }
+
       if (ap.itemType === 'object' && ap.itemProperties) {
         const updated = updateBodyParamRefs(ap.itemProperties, oldRef, newRef)
         count += updated.count

@@ -171,6 +171,7 @@ export interface ObjectBodyParameter extends BodyParameterBase {
 export interface ArrayBodyParameter extends BodyParameterBase {
   type: 'array'
   itemType: BodyParamItemType
+  itemRef?: string
   itemProperties?: BodyParameter[]
 }
 

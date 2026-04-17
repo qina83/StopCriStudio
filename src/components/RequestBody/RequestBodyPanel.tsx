@@ -50,8 +50,11 @@ function getNodeChildren(param: BodyParameter): BodyParameter[] | undefined {
     if (op.ref) return undefined
     return op.properties
   }
-  if (param.type === 'array' && (param as ArrayBodyParameter).itemType === 'object')
-    return (param as ArrayBodyParameter).itemProperties ?? []
+  if (param.type === 'array' && (param as ArrayBodyParameter).itemType === 'object') {
+    const ap = param as ArrayBodyParameter
+    if (ap.itemRef) return undefined
+    return ap.itemProperties ?? []
+  }
   return undefined
 }
 
@@ -165,7 +168,11 @@ function paramToForm(param: BodyParameter): FormState {
   }
 }
 
-function formToParam(form: FormState, existingChildren?: BodyParameter[]): BodyParameter {
+function formToParam(
+  form: FormState,
+  existingChildren?: BodyParameter[],
+  existingParam?: BodyParameter,
+): BodyParameter {
   if (form.type === 'object') {
     if (form.objectMode === 'ref' && form.schemaRefName.trim()) {
       return {
@@ -187,7 +194,22 @@ function formToParam(form: FormState, existingChildren?: BodyParameter[]): BodyP
     } as ObjectBodyParameter
   }
   if (form.type === 'array') {
-    return { name: form.name.trim(), type: 'array', itemType: form.itemType, ...(form.required ? { required: true } : {}), ...(form.description.trim() ? { description: form.description.trim() } : {}), ...(form.itemType === 'object' ? { itemProperties: existingChildren ?? [] } : {}) } as ArrayBodyParameter
+    const existingArrayParam =
+      existingParam && existingParam.type === 'array' ? (existingParam as ArrayBodyParameter) : undefined
+
+    return {
+      name: form.name.trim(),
+      type: 'array',
+      itemType: form.itemType,
+      ...(form.required ? { required: true } : {}),
+      ...(form.description.trim() ? { description: form.description.trim() } : {}),
+      ...(form.itemType === 'object'
+        ? {
+            ...(existingArrayParam?.itemRef ? { itemRef: existingArrayParam.itemRef } : {}),
+            itemProperties: existingChildren ?? [],
+          }
+        : {}),
+    } as ArrayBodyParameter
   }
   return { name: form.name.trim(), type: form.type as 'string' | 'number' | 'integer' | 'boolean', ...(form.required ? { required: true } : {}), ...(form.description.trim() ? { description: form.description.trim() } : {}) } as ScalarBodyParameter
 }
@@ -572,7 +594,7 @@ export function RequestBodyPanel({ pathName, method, body, onChange, schemas = {
     } else {
       const existingNode = getChildrenAtPath(body.properties, modal.path.slice(0, -1))[modal.path[modal.path.length - 1]]
       const existingChildren = existingNode ? getNodeChildren(existingNode) : undefined
-      onChange({ ...body, properties: updateAtPath(body.properties, modal.path, formToParam(modal.form, existingChildren)) })
+      onChange({ ...body, properties: updateAtPath(body.properties, modal.path, formToParam(modal.form, existingChildren, existingNode)) })
     }
 
     closeModal()
@@ -635,7 +657,12 @@ export function RequestBodyPanel({ pathName, method, body, onChange, schemas = {
     return params.map((param, index) => {
       const path = [...parentPath, index]
       const nodeKey = path.join('.')
-      const refValue = param.type === 'object' ? (param as ObjectBodyParameter).ref : undefined
+      const refValue =
+        param.type === 'object'
+          ? (param as ObjectBodyParameter).ref
+          : param.type === 'array' && (param as ArrayBodyParameter).itemType === 'object'
+            ? (param as ArrayBodyParameter).itemRef
+            : undefined
       const refChildren = refValue ? getReferencePreviewChildren(refValue) : undefined
       const children = refChildren ?? getNodeChildren(param)
       const isRefPreview = !!refValue
@@ -643,7 +670,11 @@ export function RequestBodyPanel({ pathName, method, body, onChange, schemas = {
       const isExpanded = expandedNodes.has(nodeKey)
       const addChildLabel = param.type === 'array' ? 'Add item property' : 'Add property'
       const schemaName = refValue ? getSchemaNameFromRef(refValue) : null
-      const schemaRefLabel = schemaName ? `$ref: ${schemaName}` : undefined
+      const schemaRefLabel = schemaName
+        ? param.type === 'array'
+          ? `$ref items: ${schemaName}`
+          : `$ref: ${schemaName}`
+        : undefined
 
       return (
         <React.Fragment key={nodeKey}>

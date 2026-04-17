@@ -301,7 +301,12 @@ function clearExistingMedia(
   return next
 }
 
-function renderSchemaTree(properties: RequestBody['properties'], depth = 0): React.ReactNode {
+function renderSchemaTree(
+  properties: RequestBody['properties'],
+  schemas: Record<string, unknown>,
+  depth = 0,
+  visitedRefs: Set<string> = new Set(),
+): React.ReactNode {
   return properties.map((param, idx) => {
     const key = `${depth}-${idx}-${param.name}`
     const label =
@@ -318,11 +323,92 @@ function renderSchemaTree(properties: RequestBody['properties'], depth = 0): Rea
         </div>
 
         {param.type === 'object' && 'ref' in param && param.ref && (
-          <div className="text-xs text-blue-700 font-mono ml-2 mt-0.5">{param.ref}</div>
+          <div className="ml-2 mt-0.5">
+            <div className="text-xs text-blue-700 font-mono">{param.ref}</div>
+            {(() => {
+              const ref = param.ref
+              const schemaName = getSchemaNameFromRef(ref)
+              if (!schemaName) {
+                return <p className="text-xs text-amber-700 mt-1">Unsupported schema reference format.</p>
+              }
+
+              if (visitedRefs.has(ref)) {
+                return <p className="text-xs text-amber-700 mt-1">Circular reference detected. Nested preview is truncated.</p>
+              }
+
+              const referencedSchema = schemas[schemaName]
+              if (!referencedSchema) {
+                return (
+                  <p className="text-xs text-amber-700 mt-1">
+                    Referenced schema <span className="font-mono">{schemaName}</span> was not found.
+                  </p>
+                )
+              }
+
+              const parsed = parseEditableObjectSchema(referencedSchema)
+              if (!parsed.editable) {
+                return (
+                  <p className="text-xs text-amber-700 mt-1">
+                    Referenced schema <span className="font-mono">{schemaName}</span> cannot be expanded: {parsed.reason}
+                  </p>
+                )
+              }
+
+              if (parsed.properties.length === 0) {
+                return <p className="text-xs text-slate-500 italic mt-1">Referenced schema has no properties.</p>
+              }
+
+              const nextVisited = new Set(visitedRefs)
+              nextVisited.add(ref)
+              return <div className="mt-1">{renderSchemaTree(parsed.properties, schemas, depth + 1, nextVisited)}</div>
+            })()}
+          </div>
         )}
 
-        {param.type === 'object' && (!('ref' in param) || !param.ref) && renderSchemaTree(param.properties, depth + 1)}
-        {param.type === 'array' && param.itemType === 'object' && renderSchemaTree(param.itemProperties ?? [], depth + 1)}
+        {param.type === 'object' && (!('ref' in param) || !param.ref) && renderSchemaTree(param.properties, schemas, depth + 1, visitedRefs)}
+        {param.type === 'array' && param.itemType === 'object' && 'itemRef' in param && param.itemRef && (
+          <div className="ml-2 mt-0.5">
+            <div className="text-xs text-blue-700 font-mono">{param.itemRef}</div>
+            {(() => {
+              const ref = param.itemRef as string
+              const schemaName = getSchemaNameFromRef(ref)
+              if (!schemaName) {
+                return <p className="text-xs text-amber-700 mt-1">Unsupported schema reference format.</p>
+              }
+
+              if (visitedRefs.has(ref)) {
+                return <p className="text-xs text-amber-700 mt-1">Circular reference detected. Nested preview is truncated.</p>
+              }
+
+              const referencedSchema = schemas[schemaName]
+              if (!referencedSchema) {
+                return (
+                  <p className="text-xs text-amber-700 mt-1">
+                    Referenced schema <span className="font-mono">{schemaName}</span> was not found.
+                  </p>
+                )
+              }
+
+              const parsed = parseEditableObjectSchema(referencedSchema)
+              if (!parsed.editable) {
+                return (
+                  <p className="text-xs text-amber-700 mt-1">
+                    Referenced schema <span className="font-mono">{schemaName}</span> cannot be expanded: {parsed.reason}
+                  </p>
+                )
+              }
+
+              if (parsed.properties.length === 0) {
+                return <p className="text-xs text-slate-500 italic mt-1">Referenced schema has no properties.</p>
+              }
+
+              const nextVisited = new Set(visitedRefs)
+              nextVisited.add(ref)
+              return <div className="mt-1">{renderSchemaTree(parsed.properties, schemas, depth + 1, nextVisited)}</div>
+            })()}
+          </div>
+        )}
+        {param.type === 'array' && param.itemType === 'object' && (!('itemRef' in param) || !param.itemRef) && renderSchemaTree(param.itemProperties ?? [], schemas, depth + 1, visitedRefs)}
       </div>
     )
   })
@@ -714,7 +800,7 @@ export function ResponsesPanel({
       if (row.inlineBody.properties.length === 0) {
         return <p className="text-sm text-slate-500 italic">Inline object schema has no properties.</p>
       }
-      return <div>{renderSchemaTree(row.inlineBody.properties)}</div>
+      return <div>{renderSchemaTree(row.inlineBody.properties, schemas)}</div>
     }
 
     if (row.source === 'ref') {
@@ -748,7 +834,7 @@ export function ResponsesPanel({
         )
       }
 
-      return <div>{renderSchemaTree(parsed.properties)}</div>
+      return <div>{renderSchemaTree(parsed.properties, schemas)}</div>
     }
 
     return null

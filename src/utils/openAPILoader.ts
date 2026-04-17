@@ -211,6 +211,17 @@ function openAPISchemaToBodyParam(
 
   if (type === 'array') {
     const items = schema.items || {}
+    if (typeof items.$ref === 'string') {
+      return {
+        name,
+        type: 'array',
+        itemType: 'object',
+        itemRef: items.$ref,
+        ...(required ? { required } : {}),
+        ...(schema.description ? { description: schema.description } : {}),
+      } as ArrayBodyParameter
+    }
+
     const itemType: BodyParamItemType = BODY_SCALAR_TYPES.has(items.type)
       ? (items.type as BodyParamItemType)
       : items.type === 'object' ? 'object' : 'string'

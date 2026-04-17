@@ -68,7 +68,10 @@ function renderTreePreview(params: BodyParameter[], depth = 0): React.ReactNode 
         )}
 
         {param.type === 'object' && !(param as any).ref && renderTreePreview(param.properties, depth + 1)}
-        {param.type === 'array' && param.itemType === 'object' && renderTreePreview(param.itemProperties ?? [], depth + 1)}
+        {param.type === 'array' && (param as any).itemRef && (
+          <div className="text-xs text-blue-700 font-mono ml-2 mt-0.5">{(param as any).itemRef}</div>
+        )}
+        {param.type === 'array' && param.itemType === 'object' && !(param as any).itemRef && renderTreePreview(param.itemProperties ?? [], depth + 1)}
       </div>
     )
   })
