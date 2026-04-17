@@ -3,19 +3,23 @@
  * Implements WP-034, WP-035, WP-036, WP-038
  */
 
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { OpenAPISpecification, RequestBody, BodyParameter } from '../../types'
 import { RequestBodyPanel } from '../RequestBody/RequestBodyPanel'
+import { sortStringsCaseInsensitiveStable } from '../../utils/sortUtils'
 import {
   buildObjectSchemaFromProperties,
   isValidSchemaName,
   parseEditableObjectSchema,
+  renameSchemaRefsInResponses,
   renameSchemaRefsInRequestBodies,
 } from '../../utils/schemaUtils'
 
 interface SchemasPanelProps {
   specification: OpenAPISpecification
   onUpdateSpecification?: (updater: (spec: OpenAPISpecification) => OpenAPISpecification) => void
+  selectedSchemaName?: string | null
+  onSelectedSchemaChange?: (schemaName: string | null) => void
 }
 
 type EditorMode = 'create' | 'edit'
@@ -147,13 +151,17 @@ function SchemaEditorModal({
   )
 }
 
-export function SchemasPanel({ specification, onUpdateSpecification }: SchemasPanelProps) {
+export function SchemasPanel({
+  specification,
+  onUpdateSpecification,
+  selectedSchemaName,
+  onSelectedSchemaChange,
+}: SchemasPanelProps) {
   const components = (specification.content.components as Record<string, unknown>) || {}
   const schemas = (components.schemas as Record<string, unknown>) || {}
 
   const schemaViews = useMemo<ParsedSchemaView[]>(() => {
-    return Object.keys(schemas)
-      .sort((a, b) => a.localeCompare(b))
+    return sortStringsCaseInsensitiveStable(Object.keys(schemas))
       .map((name) => {
         const raw = schemas[name]
         const parsed = parseEditableObjectSchema(raw)
@@ -179,6 +187,26 @@ export function SchemasPanel({ specification, onUpdateSpecification }: SchemasPa
   const [deleteName, setDeleteName] = useState<string | null>(null)
   const [infoMessage, setInfoMessage] = useState<string | null>(null)
   const [expandedSchemas, setExpandedSchemas] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    if (!selectedSchemaName) return
+
+    const selectedView = schemaViews.find((schema) => schema.name === selectedSchemaName)
+    if (!selectedView) {
+      onSelectedSchemaChange?.(null)
+      setInfoMessage(`Schema \"${selectedSchemaName}\" was not found.`)
+      return
+    }
+
+    if (!selectedView.editable) {
+      setInfoMessage(
+        `Schema \"${selectedSchemaName}\" cannot be opened in form edit mode because its structure is not visually editable.`,
+      )
+      return
+    }
+
+    openEdit(selectedSchemaName)
+  }, [selectedSchemaName, schemaViews])
 
   const openCreate = () => {
     setEditor({
@@ -207,6 +235,7 @@ export function SchemasPanel({ specification, onUpdateSpecification }: SchemasPa
       },
       error: null,
     })
+    onSelectedSchemaChange?.(schemaName)
   }
 
   const closeEditor = () => {
@@ -240,14 +269,23 @@ export function SchemasPanel({ specification, onUpdateSpecification }: SchemasPa
     let updatedRefCount = 0
 
     onUpdateSpecification((spec) => {
-      const renameResult =
+      const requestBodyRenameResult =
         editor.mode === 'edit' && editor.originalName !== trimmedName
           ? renameSchemaRefsInRequestBodies(spec, editor.originalName, trimmedName)
           : { content: JSON.parse(JSON.stringify(spec.content)), updatedCount: 0 }
 
-      updatedRefCount = renameResult.updatedCount
+      const responsesRenameResult =
+        editor.mode === 'edit' && editor.originalName !== trimmedName
+          ? renameSchemaRefsInResponses(
+              { ...spec, content: requestBodyRenameResult.content },
+              editor.originalName,
+              trimmedName,
+            )
+          : { content: requestBodyRenameResult.content, updatedCount: 0 }
 
-      const updatedContent = renameResult.content as Record<string, any>
+      updatedRefCount = requestBodyRenameResult.updatedCount + responsesRenameResult.updatedCount
+
+      const updatedContent = responsesRenameResult.content as Record<string, any>
       const updatedComponents = (updatedContent.components as Record<string, any>) || {}
       const updatedSchemas = { ...(updatedComponents.schemas as Record<string, unknown>) || {} }
 
@@ -272,7 +310,7 @@ export function SchemasPanel({ specification, onUpdateSpecification }: SchemasPa
 
     setInfoMessage(
       editor.mode === 'edit' && editor.originalName !== trimmedName
-        ? `Schema renamed. Updated ${updatedRefCount} request body $ref occurrence(s).`
+        ? `Schema renamed. Updated ${updatedRefCount} $ref occurrence(s) across request bodies and responses.`
         : 'Schema saved successfully.',
     )
 
@@ -282,11 +320,13 @@ export function SchemasPanel({ specification, onUpdateSpecification }: SchemasPa
   const confirmDelete = () => {
     if (!deleteName || !onUpdateSpecification) return
 
+    const deletingName = deleteName
+
     onUpdateSpecification((spec) => {
       const content = JSON.parse(JSON.stringify(spec.content)) as Record<string, any>
       const componentsObj = (content.components as Record<string, any>) || {}
       const currentSchemas = { ...(componentsObj.schemas as Record<string, unknown>) || {} }
-      delete currentSchemas[deleteName]
+      delete currentSchemas[deletingName]
 
       const nextComponents = { ...componentsObj }
       if (Object.keys(currentSchemas).length === 0) {
@@ -305,7 +345,11 @@ export function SchemasPanel({ specification, onUpdateSpecification }: SchemasPa
       }
     })
 
-    setInfoMessage(`Schema "${deleteName}" deleted.`)
+    if (selectedSchemaName === deletingName) {
+      onSelectedSchemaChange?.(null)
+    }
+
+    setInfoMessage(`Schema "${deletingName}" deleted.`)
     setDeleteName(null)
   }
 
@@ -412,7 +456,7 @@ export function SchemasPanel({ specification, onUpdateSpecification }: SchemasPa
 
         <SchemaEditorModal
           state={editor}
-          existingNames={Object.keys(schemas)}
+          existingNames={sortStringsCaseInsensitiveStable(Object.keys(schemas))}
           schemas={schemas}
           onClose={closeEditor}
           onChange={setEditor}

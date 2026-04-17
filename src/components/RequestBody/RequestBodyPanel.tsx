@@ -20,6 +20,7 @@ import {
   getSchemaNameFromRef,
   parseEditableObjectSchema,
 } from '../../utils/schemaUtils'
+import { sortStringsCaseInsensitiveStable } from '../../utils/sortUtils'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -530,7 +531,7 @@ export function RequestBodyPanel({ pathName, method, body, onChange, schemas = {
   const [customMediaType, setCustomMediaType] = useState('')
   const [showCustomInput, setShowCustomInput] = useState(false)
 
-  const schemaNames = useMemo(() => Object.keys(schemas).sort((a, b) => a.localeCompare(b)), [schemas])
+  const schemaNames = useMemo(() => sortStringsCaseInsensitiveStable(Object.keys(schemas)), [schemas])
   const isSchemaMode = mode === 'schema'
 
   const methodColor = METHOD_COLORS[method.toUpperCase()] ?? 'bg-slate-100 text-slate-800'

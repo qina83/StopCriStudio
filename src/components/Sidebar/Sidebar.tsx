@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { OpenAPISpecification } from '../../types'
+import { sortStringsCaseInsensitiveStable } from '../../utils/sortUtils'
 
 type NavigationItem = 'info' | 'paths' | 'schemas'
 
@@ -17,9 +18,11 @@ interface SidebarProps {
   specification?: OpenAPISpecification
   selectedPath?: string | null
   onPathSelect?: (pathName: string) => void
+  selectedSchema?: string | null
+  onSchemaSelect?: (schemaName: string) => void
 }
 
-export function Sidebar({ activeItem, onNavigate, specification, selectedPath, onPathSelect }: SidebarProps) {
+export function Sidebar({ activeItem, onNavigate, specification, selectedPath, onPathSelect, selectedSchema, onSchemaSelect }: SidebarProps) {
   const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set())
   const [filterText, setFilterText] = useState<string>('')
   const [debouncedFilter, setDebouncedFilter] = useState<string>('')
@@ -46,15 +49,15 @@ export function Sidebar({ activeItem, onNavigate, specification, selectedPath, o
   // Get filtered paths (sorted alphabetically)
   const filteredPaths = Object.keys(paths)
     .filter((pathName) => matchesFilter(pathName))
-    .sort((a, b) => a.localeCompare(b))
+  const sortedFilteredPaths = sortStringsCaseInsensitiveStable(filteredPaths)
 
   // Get filtered schemas (sorted alphabetically)
   const filteredSchemas = Object.keys(schemas)
     .filter((schemaName) => matchesFilter(schemaName))
-    .sort((a, b) => a.localeCompare(b))
+  const sortedFilteredSchemas = sortStringsCaseInsensitiveStable(filteredSchemas)
 
   // Check if there are any matches
-  const hasMatches = filteredPaths.length > 0 || filteredSchemas.length > 0
+  const hasMatches = sortedFilteredPaths.length > 0 || sortedFilteredSchemas.length > 0
 
   const handlePathSelect = (pathName: string) => {
     // When a path is selected, expand only that path and close others
@@ -136,15 +139,15 @@ export function Sidebar({ activeItem, onNavigate, specification, selectedPath, o
               <span>📍</span>
               <span className="font-medium">Paths</span>
               {Object.keys(paths).length > 0 && (
-                <span className="ml-auto text-xs bg-slate-700 px-2 py-0.5 rounded">{filteredPaths.length}/{Object.keys(paths).length}</span>
+                <span className="ml-auto text-xs bg-slate-700 px-2 py-0.5 rounded">{sortedFilteredPaths.length}/{Object.keys(paths).length}</span>
               )}
             </div>
           </button>
 
           {/* Paths list */}
-          {filteredPaths.length > 0 && activeItem === 'paths' && (
+          {sortedFilteredPaths.length > 0 && activeItem === 'paths' && (
             <div className="mt-2 ml-4 space-y-1">
-              {filteredPaths.map((pathName) => {
+              {sortedFilteredPaths.map((pathName) => {
                 const methods = getPathMethods(pathName)
                 const isExpanded = expandedPaths.has(pathName)
 
@@ -198,21 +201,26 @@ export function Sidebar({ activeItem, onNavigate, specification, selectedPath, o
               <span>📦</span>
               <span className="font-medium">Schemas</span>
               {Object.keys(schemas).length > 0 && (
-                <span className="ml-auto text-xs bg-slate-700 px-2 py-0.5 rounded">{filteredSchemas.length}/{Object.keys(schemas).length}</span>
+                <span className="ml-auto text-xs bg-slate-700 px-2 py-0.5 rounded">{sortedFilteredSchemas.length}/{Object.keys(schemas).length}</span>
               )}
             </div>
           </button>
 
           {/* Schemas list */}
-          {filteredSchemas.length > 0 && activeItem === 'schemas' && (
+          {sortedFilteredSchemas.length > 0 && activeItem === 'schemas' && (
             <div className="mt-2 ml-4 space-y-1">
-              {filteredSchemas.map((schemaName) => (
-                <div
+              {sortedFilteredSchemas.map((schemaName) => (
+                <button
                   key={schemaName}
-                  className="px-3 py-2 rounded transition-colors text-sm font-mono text-slate-300 hover:bg-slate-800 hover:text-white"
+                  onClick={() => onSchemaSelect?.(schemaName)}
+                  className={`w-full text-left px-3 py-2 rounded transition-colors text-sm font-mono ${
+                    selectedSchema === schemaName
+                      ? 'bg-blue-600 text-white'
+                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                  }`}
                 >
                   {schemaName}
-                </div>
+                </button>
               ))}
             </div>
           )}

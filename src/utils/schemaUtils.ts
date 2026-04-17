@@ -280,3 +280,72 @@ export function renameSchemaRefsInRequestBodies(
 
   return { content, updatedCount }
 }
+
+function replaceRefDeep(
+  value: unknown,
+  oldRef: string,
+  newRef: string,
+): { value: unknown; count: number } {
+  if (Array.isArray(value)) {
+    let count = 0
+    const next = value.map((item) => {
+      const updated = replaceRefDeep(item, oldRef, newRef)
+      count += updated.count
+      return updated.value
+    })
+    return { value: next, count }
+  }
+
+  if (!value || typeof value !== 'object') {
+    return { value, count: 0 }
+  }
+
+  let count = 0
+  const next: Record<string, unknown> = {}
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (key === '$ref' && raw === oldRef) {
+      next[key] = newRef
+      count += 1
+      continue
+    }
+
+    const updated = replaceRefDeep(raw, oldRef, newRef)
+    next[key] = updated.value
+    count += updated.count
+  }
+
+  return { value: next, count }
+}
+
+export function renameSchemaRefsInResponses(
+  spec: OpenAPISpecification,
+  oldName: string,
+  newName: string,
+): { content: Record<string, unknown>; updatedCount: number } {
+  const oldRef = buildSchemaRef(oldName)
+  const newRef = buildSchemaRef(newName)
+
+  const content = JSON.parse(JSON.stringify(spec.content)) as Record<string, any>
+  const paths = (content.paths as Record<string, any>) || {}
+  let updatedCount = 0
+
+  for (const pathName of Object.keys(paths)) {
+    const pathObj = paths[pathName] || {}
+
+    for (const method of HTTP_METHODS) {
+      const op = pathObj[method.toLowerCase()]
+      if (!op || typeof op !== 'object') continue
+
+      const responses = op.responses
+      if (!responses || typeof responses !== 'object' || Array.isArray(responses)) continue
+
+      const replaced = replaceRefDeep(responses, oldRef, newRef)
+      if (replaced.count > 0) {
+        op.responses = replaced.value
+        updatedCount += replaced.count
+      }
+    }
+  }
+
+  return { content, updatedCount }
+}

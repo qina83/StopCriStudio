@@ -24,6 +24,7 @@ export function SpecificationEditor({ specification, onBack }: SpecificationEdit
   const [activeItem, setActiveItem] = useState<NavigationItem>('info')
   const [pathViewMode, setPathViewMode] = useState<PathViewMode>('list') // WP-002.1
   const [selectedPath, setSelectedPath] = useState<string | null>(null) // Track selected path from sidebar
+  const [selectedSchema, setSelectedSchema] = useState<string | null>(null)
   const [isExporting, setIsExporting] = useState(false)
   const { specification: spec, updateInfo, updateSpecification, updateSpecificationAndSave, isSaving } = useSpecification(specification)
 
@@ -58,6 +59,11 @@ export function SpecificationEditor({ specification, onBack }: SpecificationEdit
     setActiveItem('paths') // Navigate to paths panel
   }
 
+  const handleSchemaSelect = (schemaName: string) => {
+    setSelectedSchema(schemaName)
+    setActiveItem('schemas')
+  }
+
   // Handle switching path view mode (WP-002.1)
   const handlePathViewModeChange = (mode: PathViewMode) => {
     setPathViewMode(mode)
@@ -77,6 +83,7 @@ export function SpecificationEditor({ specification, onBack }: SpecificationEdit
             onViewModeChange={handlePathViewModeChange}
             selectedPath={selectedPath}
             onSelectedPathChange={setSelectedPath}
+            onOpenSchemaRef={handleSchemaSelect}
           />
         )
       case 'schemas':
@@ -84,6 +91,8 @@ export function SpecificationEditor({ specification, onBack }: SpecificationEdit
           <SchemasPanel
             specification={spec}
             onUpdateSpecification={updateSpecificationAndSave || updateSpecification}
+            selectedSchemaName={selectedSchema}
+            onSelectedSchemaChange={setSelectedSchema}
           />
         )
       default:
@@ -158,6 +167,8 @@ export function SpecificationEditor({ specification, onBack }: SpecificationEdit
           specification={spec}
           selectedPath={selectedPath}
           onPathSelect={handlePathSelect}
+          selectedSchema={selectedSchema}
+          onSchemaSelect={handleSchemaSelect}
         />
 
         {/* Content panel */}

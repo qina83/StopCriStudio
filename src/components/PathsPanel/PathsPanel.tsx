@@ -7,6 +7,7 @@
 import React, { useState } from 'react'
 import { OpenAPISpecification, HTTPMethod, PathOperation, PathParameter, QueryParameter, RequestBody, OperationSecurityRequirement, SecurityScheme } from '../../types'
 import { PathEditForm } from './PathEditForm'
+import { sortStringsCaseInsensitiveStable } from '../../utils/sortUtils'
 
 const HTTP_METHODS: HTTPMethod[] = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
 
@@ -18,6 +19,7 @@ interface PathsPanelProps {
   onViewModeChange?: (mode: 'form' | 'list') => void
   selectedPath?: string | null
   onSelectedPathChange?: (path: string | null) => void
+  onOpenSchemaRef?: (schemaName: string) => void
 }
 
 type ViewMode = 'form' | 'list'
@@ -30,6 +32,7 @@ export function PathsPanel({
   onViewModeChange,
   selectedPath: externalSelectedPath,
   onSelectedPathChange,
+  onOpenSchemaRef,
 }: PathsPanelProps) {
   // View mode state - WP-002.1
   // Use external view mode if provided (controlled by parent), otherwise manage internally
@@ -59,8 +62,10 @@ export function PathsPanel({
   }
 
   const paths = (specification.content.paths as Record<string, any>) || {}
+  const sortedPathNames = sortStringsCaseInsensitiveStable(Object.keys(paths))
   const components = (specification.content.components as Record<string, any>) || {}
   const schemas = (components.schemas as Record<string, unknown>) || {}
+  const responseComponents = (components.responses as Record<string, unknown>) || {}
   const pathCount = Object.keys(paths).length
 
   const getPathOperations = (path: string): Record<string, PathOperation> => {
@@ -388,6 +393,46 @@ export function PathsPanel({
     }
   }
 
+  // WP-040-WP-046: Operation responses handlers
+  const getResponsesForOperation = (method: HTTPMethod): Record<string, unknown> => {
+    if (!selectedPath) return {}
+    const paths = (specification.content.paths as Record<string, any>) || {}
+    const pathObj = paths[selectedPath] || {}
+    const operation = pathObj[method.toLowerCase()]
+    const responses = operation?.responses
+    if (!responses || typeof responses !== 'object' || Array.isArray(responses)) return {}
+    return responses as Record<string, unknown>
+  }
+
+  const handleResponsesChange = (method: HTTPMethod, responses: Record<string, unknown>) => {
+    if (!selectedPath) return
+    const updateFn = onUpdateSpecificationAndSave || onUpdateSpecification
+    if (!updateFn) return
+
+    updateFn((spec) => {
+      const paths = (spec.content.paths as Record<string, any>) || {}
+      const pathObj = paths[selectedPath] || {}
+      const operation = pathObj[method.toLowerCase()] || {}
+      return {
+        ...spec,
+        content: {
+          ...spec.content,
+          paths: {
+            ...paths,
+            [selectedPath]: {
+              ...pathObj,
+              [method.toLowerCase()]: {
+                ...operation,
+                responses,
+              },
+            },
+          },
+        },
+        updatedAt: Date.now(),
+      }
+    })
+  }
+
   // WP-027–WP-031: Security handlers (with immediate save)
   const getOperationSecurity = (method: HTTPMethod): OperationSecurityRequirement[] => {
     if (!selectedPath) return []
@@ -476,10 +521,14 @@ export function PathsPanel({
             getRequestBody={getRequestBodyForOperation}
             onRequestBodyChange={handleRequestBodyChange}
             schemas={schemas}
+            responseComponents={responseComponents}
+            getResponses={getResponsesForOperation}
+            onResponsesChange={handleResponsesChange}
             getOperationSecurity={getOperationSecurity}
             getSecuritySchemes={getSecuritySchemes}
             getOtherOperationsSchemeNames={getOtherOperationsSchemeNames}
             onOperationSecurityChange={handleOperationSecurityChange}
+            onOpenSchemaRef={onOpenSchemaRef}
           />
         ) : (
           <>
@@ -553,7 +602,7 @@ export function PathsPanel({
                 {/* Paths List */}
                 {pathCount > 0 && (
                   <div className="space-y-4">
-                    {Object.keys(paths).map((pathName) => {
+                    {sortedPathNames.map((pathName) => {
                       const pathOps = getPathOperations(pathName)
                       const methodNames = Object.keys(pathOps) as HTTPMethod[]
 

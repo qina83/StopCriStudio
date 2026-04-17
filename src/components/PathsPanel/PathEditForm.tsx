@@ -17,6 +17,7 @@ import {
 import { QueryParametersPanel } from '../QueryParameters/QueryParametersPanel'
 import { RequestBodyPanel } from '../RequestBody/RequestBodyPanel'
 import { SecurityPanel } from '../Security/SecurityPanel'
+import { ResponsesPanel } from '../Responses/ResponsesPanel'
 
 const HTTP_METHODS: HTTPMethod[] = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
 const PARAMETER_TYPES: ParameterType[] = ['string', 'number', 'integer', 'boolean']
@@ -39,6 +40,10 @@ interface PathEditFormProps {
   getRequestBody?: (method: HTTPMethod) => RequestBody | undefined
   onRequestBodyChange?: (method: HTTPMethod, body: RequestBody) => void
   schemas?: Record<string, unknown>
+  responseComponents?: Record<string, unknown>
+  // WP-040-WP-046: Responses support
+  getResponses?: (method: HTTPMethod) => Record<string, unknown>
+  onResponsesChange?: (method: HTTPMethod, responses: Record<string, unknown>) => void
   // WP-027: Security support
   getOperationSecurity?: (method: HTTPMethod) => OperationSecurityRequirement[]
   getSecuritySchemes?: () => Record<string, SecurityScheme>
@@ -48,6 +53,7 @@ interface PathEditFormProps {
     security: OperationSecurityRequirement[],
     schemes: Record<string, SecurityScheme>,
   ) => void
+  onOpenSchemaRef?: (schemaName: string) => void
 }
 
 /**
@@ -162,10 +168,14 @@ export function PathEditForm({
   getRequestBody,
   onRequestBodyChange,
   schemas = {},
+  responseComponents = {},
+  getResponses,
+  onResponsesChange,
   getOperationSecurity,
   getSecuritySchemes,
   getOtherOperationsSchemeNames,
   onOperationSecurityChange,
+  onOpenSchemaRef,
 }: PathEditFormProps) {
   const [selectedOperation, setSelectedOperation] = useState<HTTPMethod | null>(null)
   const [showAddConfirmModal, setShowAddConfirmModal] = useState(false)
@@ -615,6 +625,19 @@ export function PathEditForm({
               body={getRequestBody(selectedOperation) ?? { required: false, mediaType: 'application/json', properties: [] }}
               onChange={(body) => onRequestBodyChange(selectedOperation, body)}
               schemas={schemas}
+            />
+          )}
+
+          {/* WP-040-WP-046: Responses section */}
+          {getResponses && onResponsesChange && (
+            <ResponsesPanel
+              pathName={pathName}
+              method={selectedOperation}
+              responses={getResponses(selectedOperation)}
+              schemas={schemas}
+              responseComponents={responseComponents}
+              onChange={(responses) => onResponsesChange(selectedOperation, responses)}
+              onOpenSchemaRef={onOpenSchemaRef}
             />
           )}
 

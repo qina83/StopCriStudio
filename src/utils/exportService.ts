@@ -53,6 +53,16 @@ function transformForExport(content: Record<string, any>): Record<string, any> {
         if (pathObj[method]) {
           const operation = pathObj[method]
 
+          // WP-046: Ensure each operation exports a valid responses object
+          const responses = operation.responses
+          if (!responses || typeof responses !== 'object' || Array.isArray(responses) || Object.keys(responses).length === 0) {
+            operation.responses = {
+              '200': {
+                description: 'Successful response',
+              },
+            }
+          }
+
           // Build query parameters from internal _queryParams (WP-020)
           const queryParams: QueryParameter[] = operation._queryParams || []
           const openAPIQueryParams = queryParams.map(queryParamToOpenAPI)
