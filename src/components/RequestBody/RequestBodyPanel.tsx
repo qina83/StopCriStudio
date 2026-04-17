@@ -525,6 +525,59 @@ function MediaTypeChangeModal({ onConfirm, onCancel }: { onConfirm: () => void; 
   )
 }
 
+function CreateSchemaFromInlineModal({
+  initialName,
+  error,
+  onConfirm,
+  onCancel,
+}: {
+  initialName: string
+  error: string | null
+  onConfirm: (schemaName: string) => void
+  onCancel: () => void
+}) {
+  const [name, setName] = useState(initialName)
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={onCancel}>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md" onClick={e => e.stopPropagation()}>
+        <div className="bg-blue-600 text-white px-6 py-4 rounded-t-xl">
+          <h3 className="text-xl font-bold">Create reusable schema</h3>
+        </div>
+        <div className="p-6 space-y-3">
+          <p className="text-sm text-slate-700">
+            Enter a target schema name in components/schemas. The current inline request body model will be replaced by a $ref.
+          </p>
+          <input
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+            value={name}
+            onChange={e => setName(e.target.value)}
+            placeholder="UserPayload"
+            autoFocus
+            onKeyDown={e => {
+              if (e.key === 'Enter') onConfirm(name)
+              if (e.key === 'Escape') onCancel()
+            }}
+          />
+          {error && (
+            <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1">
+              {error}
+            </p>
+          )}
+        </div>
+        <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-3 rounded-b-xl">
+          <button onClick={onCancel} className="px-4 py-2 text-slate-700 hover:bg-slate-200 rounded-lg font-medium transition-colors">
+            Cancel
+          </button>
+          <button onClick={() => onConfirm(name)} className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg font-medium transition-colors">
+            Create schema
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main RequestBodyPanel ────────────────────────────────────────────────────
 
 interface RequestBodyPanelProps {
@@ -534,6 +587,7 @@ interface RequestBodyPanelProps {
   onChange: (body: RequestBody) => void
   schemas?: Record<string, unknown>
   mode?: 'requestBody' | 'schema'
+  onCreateSchemaFromInline?: (schemaName: string) => { ok: boolean; error?: string }
 }
 
 interface ModalState {
@@ -545,16 +599,29 @@ interface ModalState {
   originalName?: string
 }
 
-export function RequestBodyPanel({ pathName, method, body, onChange, schemas = {}, mode = 'requestBody' }: RequestBodyPanelProps) {
+export function RequestBodyPanel({
+  pathName,
+  method,
+  body,
+  onChange,
+  schemas = {},
+  mode = 'requestBody',
+  onCreateSchemaFromInline,
+}: RequestBodyPanelProps) {
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set())
   const [modal, setModal] = useState<ModalState>({ open: false, mode: 'add', path: [], form: blankForm(), errors: {} })
   const [confirmDeletePath, setConfirmDeletePath] = useState<number[] | null>(null)
   const [pendingMediaType, setPendingMediaType] = useState<string | null>(null)
   const [customMediaType, setCustomMediaType] = useState('')
   const [showCustomInput, setShowCustomInput] = useState(false)
+  const [schemaActionError, setSchemaActionError] = useState<string | null>(null)
+  const [showCreateSchemaModal, setShowCreateSchemaModal] = useState(false)
+  const [createSchemaModalError, setCreateSchemaModalError] = useState<string | null>(null)
 
   const schemaNames = useMemo(() => sortStringsCaseInsensitiveStable(Object.keys(schemas)), [schemas])
   const isSchemaMode = mode === 'schema'
+  const isUsingSchemaRef = !isSchemaMode && typeof body.schemaRef === 'string' && body.schemaRef.trim().length > 0
+  const schemaRefName = isUsingSchemaRef ? (getSchemaNameFromRef(body.schemaRef as string) ?? body.schemaRef?.trim()) : null
 
   const methodColor = METHOD_COLORS[method.toUpperCase()] ?? 'bg-slate-100 text-slate-800'
 
@@ -718,6 +785,37 @@ export function RequestBodyPanel({ pathName, method, body, onChange, schemas = {
 
   const isCustomMediaType = !MEDIA_TYPE_OPTIONS.includes(body.mediaType as any)
 
+  const handleCreateSchemaFromInline = () => {
+    setSchemaActionError(null)
+
+    if (!onCreateSchemaFromInline) {
+      setSchemaActionError('Schema extraction is unavailable here.')
+      return
+    }
+
+    if (isUsingSchemaRef) {
+      setSchemaActionError('This request body already uses a schema reference.')
+      return
+    }
+
+    setCreateSchemaModalError(null)
+    setShowCreateSchemaModal(true)
+  }
+
+  const confirmCreateSchemaFromInline = (schemaName: string) => {
+    if (!onCreateSchemaFromInline) return
+
+    const result = onCreateSchemaFromInline(schemaName)
+    if (!result.ok) {
+      setCreateSchemaModalError(result.error ?? 'Failed to create schema from inline model.')
+      return
+    }
+
+    setShowCreateSchemaModal(false)
+    setCreateSchemaModalError(null)
+    setSchemaActionError(null)
+  }
+
   return (
     <div className="mt-4 border border-slate-200 rounded-lg overflow-hidden">
       {!isSchemaMode && (
@@ -757,6 +855,46 @@ export function RequestBodyPanel({ pathName, method, body, onChange, schemas = {
               />
               <span className="text-sm font-semibold text-slate-700">Required</span>
             </label>
+
+            <div className="pt-1 border-t border-slate-200">
+              {isUsingSchemaRef ? (
+                <div className="flex flex-col gap-2">
+                  <p className="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded px-2 py-1 font-mono inline-block w-fit">
+                    Using schema reference: {schemaRefName}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => onChange({ ...body, schemaRef: undefined })}
+                      className="px-3 py-1.5 text-xs font-semibold rounded border border-slate-300 text-slate-700 bg-white hover:bg-slate-50"
+                    >
+                      Switch to inline model
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={handleCreateSchemaFromInline}
+                      disabled={!onCreateSchemaFromInline}
+                      className={`px-3 py-1.5 text-xs font-semibold rounded border transition-colors ${onCreateSchemaFromInline ? 'border-blue-300 text-blue-700 bg-blue-50 hover:bg-blue-100' : 'border-slate-300 text-slate-400 bg-slate-100 cursor-not-allowed'}`}
+                    >
+                      Create reusable schema from inline model
+                    </button>
+                  </div>
+                  <p className="text-xs text-slate-500">
+                    Saves the current inline object as components/schemas and replaces this request body schema with a $ref.
+                  </p>
+                </div>
+              )}
+              {schemaActionError && (
+                <p className="mt-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1">
+                  {schemaActionError}
+                </p>
+              )}
+            </div>
           </div>
 
           {/* Media type selector (WP-024) */}
@@ -815,22 +953,31 @@ export function RequestBodyPanel({ pathName, method, body, onChange, schemas = {
 
       {/* Properties tree (WP-025) */}
       <div className="px-2 py-2 min-h-[60px]">
-        <div className="flex items-center justify-between px-2 py-1 mb-1">
-          <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Properties</span>
-          <button
-            onClick={() => openAddModal([])}
-            className="text-xs font-semibold text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 py-1 rounded transition-colors flex items-center gap-1"
-          >
-            <span className="text-base leading-none">+</span> Add property
-          </button>
-        </div>
-        {body.properties.length === 0 ? (
-          <div className="py-6 text-center">
-            <p className="text-sm text-slate-400 italic">No properties defined.</p>
-            <p className="text-xs text-slate-400 mt-1">Click "+ Add property" to get started.</p>
+        {isUsingSchemaRef ? (
+          <div className="py-6 px-3 text-center">
+            <p className="text-sm text-slate-600">Inline property editing is disabled while using a schema reference.</p>
+            <p className="text-xs text-slate-500 mt-1">Switch back to inline mode to edit properties here.</p>
           </div>
         ) : (
-          <div>{renderTree(body.properties, [], 0)}</div>
+          <>
+            <div className="flex items-center justify-between px-2 py-1 mb-1">
+              <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Properties</span>
+              <button
+                onClick={() => openAddModal([])}
+                className="text-xs font-semibold text-blue-600 hover:text-blue-800 hover:bg-blue-50 px-2 py-1 rounded transition-colors flex items-center gap-1"
+              >
+                <span className="text-base leading-none">+</span> Add property
+              </button>
+            </div>
+            {body.properties.length === 0 ? (
+              <div className="py-6 text-center">
+                <p className="text-sm text-slate-400 italic">No properties defined.</p>
+                <p className="text-xs text-slate-400 mt-1">Click "+ Add property" to get started.</p>
+              </div>
+            ) : (
+              <div>{renderTree(body.properties, [], 0)}</div>
+            )}
+          </>
         )}
       </div>
 
@@ -881,6 +1028,18 @@ export function RequestBodyPanel({ pathName, method, body, onChange, schemas = {
         <MediaTypeChangeModal
           onConfirm={confirmMediaTypeChange}
           onCancel={() => setPendingMediaType(null)}
+        />
+      )}
+
+      {showCreateSchemaModal && (
+        <CreateSchemaFromInlineModal
+          initialName=""
+          error={createSchemaModalError}
+          onConfirm={confirmCreateSchemaFromInline}
+          onCancel={() => {
+            setShowCreateSchemaModal(false)
+            setCreateSchemaModalError(null)
+          }}
         />
       )}
     </div>

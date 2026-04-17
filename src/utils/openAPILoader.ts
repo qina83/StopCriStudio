@@ -282,8 +282,13 @@ function importRequestBody(content: Record<string, any>): Record<string, any> {
         'application/json'
 
       const schema = content[mediaType]?.schema ?? {}
-      const requiredFields: string[] = Array.isArray(schema.required) ? schema.required : []
       const properties: BodyParameter[] = []
+      const schemaRef =
+        schema && typeof schema === 'object' && typeof schema.$ref === 'string'
+          ? schema.$ref
+          : undefined
+
+      const requiredFields: string[] = Array.isArray(schema.required) ? schema.required : []
 
       if (schema.properties && typeof schema.properties === 'object') {
         for (const [propName, propSchema] of Object.entries(schema.properties)) {
@@ -300,6 +305,7 @@ function importRequestBody(content: Record<string, any>): Record<string, any> {
       const requestBody: RequestBody = {
         required: rb.required === true,
         mediaType,
+        ...(schemaRef ? { schemaRef } : {}),
         properties,
         ...(typeof rb.description === 'string' && rb.description.trim()
           ? { description: rb.description.trim() }

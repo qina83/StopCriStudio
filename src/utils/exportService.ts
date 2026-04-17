@@ -150,7 +150,10 @@ function buildSecuritySchemesExport(
 // ─── Request body → OpenAPI requestBody (WP-026) ─────────────────────────────
 
 function buildRequestBodyExport(body: RequestBody): Record<string, unknown> {
-  const schema = buildObjectSchemaFromProperties(body.properties)
+  const schema =
+    typeof body.schemaRef === 'string' && body.schemaRef.trim()
+      ? { $ref: body.schemaRef.trim() }
+      : buildObjectSchemaFromProperties(body.properties)
 
   const result: Record<string, unknown> = {
     required: body.required,

@@ -181,5 +181,6 @@ export interface RequestBody {
   description?: string
   required: boolean
   mediaType: string
+  schemaRef?: string
   properties: BodyParameter[]
 }

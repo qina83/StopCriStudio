@@ -39,11 +39,18 @@ interface PathEditFormProps {
   // WP-022: Request body support
   getRequestBody?: (method: HTTPMethod) => RequestBody | undefined
   onRequestBodyChange?: (method: HTTPMethod, body: RequestBody) => void
+  onRequestBodyCreateSchemaFromInline?: (method: HTTPMethod, schemaName: string) => { ok: boolean; error?: string }
   schemas?: Record<string, unknown>
   responseComponents?: Record<string, unknown>
   // WP-040-WP-046: Responses support
   getResponses?: (method: HTTPMethod) => Record<string, unknown>
   onResponsesChange?: (method: HTTPMethod, responses: Record<string, unknown>) => void
+  onResponseCreateSchemaFromInline?: (
+    method: HTTPMethod,
+    statusCode: string,
+    mediaType: string,
+    schemaName: string,
+  ) => { ok: boolean; error?: string }
   // WP-027: Security support
   getOperationSecurity?: (method: HTTPMethod) => OperationSecurityRequirement[]
   getSecuritySchemes?: () => Record<string, SecurityScheme>
@@ -167,10 +174,12 @@ export function PathEditForm({
   onQueryParametersChange,
   getRequestBody,
   onRequestBodyChange,
+  onRequestBodyCreateSchemaFromInline,
   schemas = {},
   responseComponents = {},
   getResponses,
   onResponsesChange,
+  onResponseCreateSchemaFromInline,
   getOperationSecurity,
   getSecuritySchemes,
   getOtherOperationsSchemeNames,
@@ -625,6 +634,12 @@ export function PathEditForm({
               body={getRequestBody(selectedOperation) ?? { required: false, mediaType: 'application/json', properties: [] }}
               onChange={(body) => onRequestBodyChange(selectedOperation, body)}
               schemas={schemas}
+              onCreateSchemaFromInline={(schemaName) => {
+                if (!onRequestBodyCreateSchemaFromInline) {
+                  return { ok: false, error: 'Schema extraction is unavailable for this operation.' }
+                }
+                return onRequestBodyCreateSchemaFromInline(selectedOperation, schemaName)
+              }}
             />
           )}
 
@@ -638,6 +653,12 @@ export function PathEditForm({
               responseComponents={responseComponents}
               onChange={(responses) => onResponsesChange(selectedOperation, responses)}
               onOpenSchemaRef={onOpenSchemaRef}
+              onCreateSchemaFromInline={(statusCode, mediaType, schemaName) => {
+                if (!onResponseCreateSchemaFromInline) {
+                  return { ok: false, error: 'Schema extraction is unavailable for this response.' }
+                }
+                return onResponseCreateSchemaFromInline(selectedOperation, statusCode, mediaType, schemaName)
+              }}
             />
           )}
 

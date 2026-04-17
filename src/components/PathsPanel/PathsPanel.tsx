@@ -8,6 +8,7 @@ import React, { useState } from 'react'
 import { OpenAPISpecification, HTTPMethod, PathOperation, PathParameter, QueryParameter, RequestBody, OperationSecurityRequirement, SecurityScheme } from '../../types'
 import { PathEditForm } from './PathEditForm'
 import { sortStringsCaseInsensitiveStable } from '../../utils/sortUtils'
+import { buildObjectSchemaFromProperties, buildSchemaRef, isValidSchemaName } from '../../utils/schemaUtils'
 
 const HTTP_METHODS: HTTPMethod[] = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
 
@@ -393,6 +394,84 @@ export function PathsPanel({
     }
   }
 
+  const handleRequestBodyCreateSchemaFromInline = (
+    method: HTTPMethod,
+    schemaName: string,
+  ): { ok: boolean; error?: string } => {
+    if (!selectedPath) {
+      return { ok: false, error: 'No path is currently selected.' }
+    }
+
+    const updateFn = onUpdateSpecificationAndSave || onUpdateSpecification
+    if (!updateFn) {
+      return { ok: false, error: 'Specification updater is unavailable.' }
+    }
+
+    const trimmedSchemaName = schemaName.trim()
+    if (!trimmedSchemaName) {
+      return { ok: false, error: 'Schema name is required.' }
+    }
+
+    if (!isValidSchemaName(trimmedSchemaName)) {
+      return {
+        ok: false,
+        error: 'Schema name is invalid. Use letters, numbers, hyphens, or underscores.',
+      }
+    }
+
+    if (schemas[trimmedSchemaName]) {
+      return {
+        ok: false,
+        error: `Schema "${trimmedSchemaName}" already exists in components/schemas.`,
+      }
+    }
+
+    const sourceBody = getRequestBodyForOperation(method)
+    if (!sourceBody) {
+      return { ok: false, error: 'No request body is defined for this operation.' }
+    }
+
+    if (sourceBody.schemaRef) {
+      return { ok: false, error: 'This request body already uses a schema reference.' }
+    }
+
+    updateFn((spec) => {
+      const nextPaths = { ...((spec.content.paths as Record<string, any>) || {}) }
+      const pathObj = { ...(nextPaths[selectedPath] || {}) }
+      const operation = { ...(pathObj[method.toLowerCase()] || {}) }
+      const requestBody = operation._requestBody as RequestBody | undefined
+
+      if (!requestBody) return spec
+
+      const nextBody: RequestBody = {
+        ...requestBody,
+        schemaRef: buildSchemaRef(trimmedSchemaName),
+        properties: [],
+      }
+
+      operation._requestBody = nextBody
+      pathObj[method.toLowerCase()] = operation
+      nextPaths[selectedPath] = pathObj
+
+      const components = { ...((spec.content.components as Record<string, any>) || {}) }
+      const nextSchemas = { ...((components.schemas as Record<string, unknown>) || {}) }
+      nextSchemas[trimmedSchemaName] = buildObjectSchemaFromProperties(requestBody.properties)
+      components.schemas = nextSchemas
+
+      return {
+        ...spec,
+        content: {
+          ...spec.content,
+          paths: nextPaths,
+          components,
+        },
+        updatedAt: Date.now(),
+      }
+    })
+
+    return { ok: true }
+  }
+
   // WP-040-WP-046: Operation responses handlers
   const getResponsesForOperation = (method: HTTPMethod): Record<string, unknown> => {
     if (!selectedPath) return {}
@@ -431,6 +510,118 @@ export function PathsPanel({
         updatedAt: Date.now(),
       }
     })
+  }
+
+  const handleResponseCreateSchemaFromInline = (
+    method: HTTPMethod,
+    statusCode: string,
+    mediaType: string,
+    schemaName: string,
+  ): { ok: boolean; error?: string } => {
+    if (!selectedPath) {
+      return { ok: false, error: 'No path is currently selected.' }
+    }
+
+    const updateFn = onUpdateSpecificationAndSave || onUpdateSpecification
+    if (!updateFn) {
+      return { ok: false, error: 'Specification updater is unavailable.' }
+    }
+
+    const trimmedSchemaName = schemaName.trim()
+    if (!trimmedSchemaName) {
+      return { ok: false, error: 'Schema name is required.' }
+    }
+
+    if (!isValidSchemaName(trimmedSchemaName)) {
+      return {
+        ok: false,
+        error: 'Schema name is invalid. Use letters, numbers, hyphens, or underscores.',
+      }
+    }
+
+    if (schemas[trimmedSchemaName]) {
+      return {
+        ok: false,
+        error: `Schema "${trimmedSchemaName}" already exists in components/schemas.`,
+      }
+    }
+
+    const responseCollection = getResponsesForOperation(method)
+    const rawResponse = responseCollection[statusCode]
+    if (!rawResponse || typeof rawResponse !== 'object' || Array.isArray(rawResponse)) {
+      return { ok: false, error: `Response ${statusCode} is not editable.` }
+    }
+
+    const responseObj = rawResponse as Record<string, unknown>
+    const content = responseObj.content
+    if (!content || typeof content !== 'object' || Array.isArray(content)) {
+      return { ok: false, error: `Response ${statusCode} has no editable content.` }
+    }
+
+    const mediaEntry = (content as Record<string, unknown>)[mediaType]
+    if (!mediaEntry || typeof mediaEntry !== 'object' || Array.isArray(mediaEntry)) {
+      return { ok: false, error: `Response ${statusCode} / ${mediaType} is not editable.` }
+    }
+
+    const mediaSchema = (mediaEntry as Record<string, unknown>).schema
+    if (!mediaSchema || typeof mediaSchema !== 'object' || Array.isArray(mediaSchema)) {
+      return { ok: false, error: 'Inline response schema is missing or invalid.' }
+    }
+
+    updateFn((spec) => {
+      const nextPaths = { ...((spec.content.paths as Record<string, any>) || {}) }
+      const pathObj = { ...(nextPaths[selectedPath] || {}) }
+      const operation = { ...(pathObj[method.toLowerCase()] || {}) }
+      const currentResponses = operation.responses
+
+      if (!currentResponses || typeof currentResponses !== 'object' || Array.isArray(currentResponses)) {
+        return spec
+      }
+
+      const nextResponses = { ...(currentResponses as Record<string, unknown>) }
+      const nextResponseEntryRaw = nextResponses[statusCode]
+      if (!nextResponseEntryRaw || typeof nextResponseEntryRaw !== 'object' || Array.isArray(nextResponseEntryRaw)) {
+        return spec
+      }
+
+      const nextResponseEntry = { ...(nextResponseEntryRaw as Record<string, unknown>) }
+      const nextContentRaw = nextResponseEntry.content
+      if (!nextContentRaw || typeof nextContentRaw !== 'object' || Array.isArray(nextContentRaw)) {
+        return spec
+      }
+
+      const nextContent = { ...(nextContentRaw as Record<string, unknown>) }
+      const nextMediaRaw = nextContent[mediaType]
+      if (!nextMediaRaw || typeof nextMediaRaw !== 'object' || Array.isArray(nextMediaRaw)) {
+        return spec
+      }
+
+      const nextMedia = { ...(nextMediaRaw as Record<string, unknown>) }
+      nextMedia.schema = { $ref: buildSchemaRef(trimmedSchemaName) }
+      nextContent[mediaType] = nextMedia
+      nextResponseEntry.content = nextContent
+      nextResponses[statusCode] = nextResponseEntry
+      operation.responses = nextResponses
+      pathObj[method.toLowerCase()] = operation
+      nextPaths[selectedPath] = pathObj
+
+      const components = { ...((spec.content.components as Record<string, any>) || {}) }
+      const nextSchemas = { ...((components.schemas as Record<string, unknown>) || {}) }
+      nextSchemas[trimmedSchemaName] = mediaSchema
+      components.schemas = nextSchemas
+
+      return {
+        ...spec,
+        content: {
+          ...spec.content,
+          paths: nextPaths,
+          components,
+        },
+        updatedAt: Date.now(),
+      }
+    })
+
+    return { ok: true }
   }
 
   // WP-027–WP-031: Security handlers (with immediate save)
@@ -520,10 +711,12 @@ export function PathsPanel({
             onQueryParametersChange={handleQueryParametersChange}
             getRequestBody={getRequestBodyForOperation}
             onRequestBodyChange={handleRequestBodyChange}
+            onRequestBodyCreateSchemaFromInline={handleRequestBodyCreateSchemaFromInline}
             schemas={schemas}
             responseComponents={responseComponents}
             getResponses={getResponsesForOperation}
             onResponsesChange={handleResponsesChange}
+            onResponseCreateSchemaFromInline={handleResponseCreateSchemaFromInline}
             getOperationSecurity={getOperationSecurity}
             getSecuritySchemes={getSecuritySchemes}
             getOtherOperationsSchemeNames={getOtherOperationsSchemeNames}

@@ -19,6 +19,11 @@ interface ResponsesPanelProps {
   responseComponents?: Record<string, unknown>
   onChange: (responses: Record<string, unknown>) => void
   onOpenSchemaRef?: (schemaName: string) => void
+  onCreateSchemaFromInline?: (
+    statusCode: string,
+    mediaType: string,
+    schemaName: string,
+  ) => { ok: boolean; error?: string }
 }
 
 interface ResponseRow {
@@ -587,6 +592,63 @@ function EditorModal({
   )
 }
 
+function CreateResponseSchemaModal({
+  statusCode,
+  mediaType,
+  initialName,
+  error,
+  onConfirm,
+  onCancel,
+}: {
+  statusCode: string
+  mediaType: string
+  initialName: string
+  error: string | null
+  onConfirm: (schemaName: string) => void
+  onCancel: () => void
+}) {
+  const [name, setName] = useState(initialName)
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4" onClick={onCancel}>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+        <div className="bg-violet-600 text-white px-6 py-4 rounded-t-xl">
+          <h3 className="text-xl font-bold">Create response schema</h3>
+        </div>
+        <div className="p-6 space-y-3">
+          <p className="text-sm text-slate-700">
+            Enter a schema name for response {statusCode} / {mediaType}. The inline schema will be replaced with a $ref.
+          </p>
+          <input
+            className="w-full px-3 py-2 border border-slate-300 rounded-lg font-mono focus:outline-none focus:ring-2 focus:ring-violet-500"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="UserResponse"
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') onConfirm(name)
+              if (e.key === 'Escape') onCancel()
+            }}
+          />
+          {error && (
+            <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1">
+              {error}
+            </p>
+          )}
+        </div>
+        <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-3 rounded-b-xl">
+          <button onClick={onCancel} className="px-4 py-2 text-slate-700 hover:bg-slate-200 rounded-lg font-medium transition-colors">
+            Cancel
+          </button>
+          <button onClick={() => onConfirm(name)} className="px-4 py-2 bg-violet-600 text-white hover:bg-violet-700 rounded-lg font-medium transition-colors">
+            Create schema
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function ResponsesPanel({
   pathName,
   method,
@@ -595,6 +657,7 @@ export function ResponsesPanel({
   responseComponents = {},
   onChange,
   onOpenSchemaRef,
+  onCreateSchemaFromInline,
 }: ResponsesPanelProps) {
   const rows = useMemo(
     () => flattenResponses(responses, schemas, responseComponents),
@@ -609,6 +672,37 @@ export function ResponsesPanel({
   const [deleteTarget, setDeleteTarget] = useState<{ statusCode: string; mediaType: string | null } | null>(null)
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
   const [schemaNavigationMessage, setSchemaNavigationMessage] = useState<string | null>(null)
+  const [createSchemaTarget, setCreateSchemaTarget] = useState<{ statusCode: string; mediaType: string } | null>(null)
+  const [createSchemaModalError, setCreateSchemaModalError] = useState<string | null>(null)
+
+  const handleCreateSchemaFromInline = (row: ResponseRow) => {
+    if (row.source !== 'inline' || !row.mediaType) return
+    if (!onCreateSchemaFromInline) {
+      setSchemaNavigationMessage('Schema extraction is unavailable for this response.')
+      return
+    }
+
+    setCreateSchemaModalError(null)
+    setCreateSchemaTarget({ statusCode: row.statusCode, mediaType: row.mediaType })
+  }
+
+  const confirmCreateSchemaFromInline = (schemaName: string) => {
+    if (!createSchemaTarget || !onCreateSchemaFromInline) return
+
+    const result = onCreateSchemaFromInline(
+      createSchemaTarget.statusCode,
+      createSchemaTarget.mediaType,
+      schemaName,
+    )
+    if (!result.ok) {
+      setCreateSchemaModalError(result.error ?? 'Failed to create schema from inline response model.')
+      return
+    }
+
+    setCreateSchemaTarget(null)
+    setCreateSchemaModalError(null)
+    setSchemaNavigationMessage(null)
+  }
 
   const openAdd = () => {
     setEditor({
@@ -950,6 +1044,14 @@ export function ResponsesPanel({
                     </div>
 
                     <div className="flex items-center gap-2 flex-shrink-0">
+                      {row.source === 'inline' && row.mediaType && (
+                        <button
+                          onClick={() => handleCreateSchemaFromInline(row)}
+                          className="px-2.5 py-1.5 text-xs bg-violet-600 text-white rounded hover:bg-violet-700"
+                        >
+                          Create schema
+                        </button>
+                      )}
                       <button
                         onClick={() => openEdit(row)}
                         className="px-2.5 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
@@ -1028,6 +1130,20 @@ export function ResponsesPanel({
             </div>
           </div>
         </div>
+      )}
+
+      {createSchemaTarget && (
+        <CreateResponseSchemaModal
+          statusCode={createSchemaTarget.statusCode}
+          mediaType={createSchemaTarget.mediaType}
+          initialName=""
+          error={createSchemaModalError}
+          onConfirm={confirmCreateSchemaFromInline}
+          onCancel={() => {
+            setCreateSchemaTarget(null)
+            setCreateSchemaModalError(null)
+          }}
+        />
       )}
     </div>
   )
