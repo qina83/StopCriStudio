@@ -8,11 +8,12 @@ import { OpenAPISpecification, RequestBody, BodyParameter } from '../../types'
 import { RequestBodyPanel } from '../RequestBody/RequestBodyPanel'
 import { sortStringsCaseInsensitiveStable } from '../../utils/sortUtils'
 import {
+  collectSchemaUsageOperations,
   buildObjectSchemaFromProperties,
   isValidSchemaName,
   parseEditableObjectSchema,
-  renameSchemaRefsInResponses,
-  renameSchemaRefsInRequestBodies,
+  renameSchemaRefsEverywhere,
+  SchemaUsageOperation,
 } from '../../utils/schemaUtils'
 
 interface SchemasPanelProps {
@@ -41,6 +42,8 @@ interface ParsedSchemaView {
   properties: BodyParameter[]
   reason?: string
 }
+
+type RenameStrategy = 'rename-all' | 'create-new'
 
 function renderTreePreview(params: BodyParameter[], depth = 0): React.ReactNode {
   return params.map((param, idx) => {
@@ -75,6 +78,7 @@ function SchemaEditorModal({
   state,
   existingNames,
   schemas,
+  usedIn,
   onClose,
   onChange,
   onSave,
@@ -82,6 +86,7 @@ function SchemaEditorModal({
   state: SchemaEditorState
   existingNames: string[]
   schemas: Record<string, unknown>
+  usedIn: SchemaUsageOperation[]
   onClose: () => void
   onChange: (next: SchemaEditorState) => void
   onSave: () => void
@@ -134,6 +139,23 @@ function SchemaEditorModal({
               schemas={schemas}
             />
           </div>
+
+          {state.mode === 'edit' && (
+            <div className="border border-slate-200 rounded-lg p-3">
+              <p className="text-sm font-semibold text-slate-700 mb-2">Used in</p>
+              {usedIn.length > 0 ? (
+                <ul className="space-y-1">
+                  {usedIn.map((usage) => (
+                    <li key={`${usage.method} ${usage.path}`} className="text-sm font-mono text-slate-800">
+                      {usage.method} {usage.path}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-slate-500">No operations currently reference this schema.</p>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-3 rounded-b-xl">
@@ -145,6 +167,63 @@ function SchemaEditorModal({
             className="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg font-medium transition-colors"
           >
             Save Schema
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function RenameStrategyModal({
+  open,
+  originalName,
+  newName,
+  onChoose,
+  onCancel,
+}: {
+  open: boolean
+  originalName: string
+  newName: string
+  onChoose: (strategy: RenameStrategy) => void
+  onCancel: () => void
+}) {
+  if (!open) return null
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4" onClick={onCancel}>
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
+        <div className="bg-blue-600 text-white px-6 py-4 rounded-t-xl">
+          <h3 className="text-xl font-bold">Schema name changed</h3>
+        </div>
+
+        <div className="p-6 space-y-4">
+          <p className="text-slate-700 text-sm leading-relaxed">
+            You changed schema name <span className="font-mono">{originalName}</span> to{' '}
+            <span className="font-mono">{newName}</span>. Choose how existing references should be handled.
+          </p>
+
+          <div className="space-y-3">
+            <button
+              onClick={() => onChoose('rename-all')}
+              className="w-full text-left px-4 py-3 rounded-lg border border-blue-300 bg-blue-50 hover:bg-blue-100 transition-colors"
+            >
+              <div className="font-semibold text-blue-900">Rename all schema references</div>
+              <div className="text-xs text-blue-800 mt-1">Updates direct and nested references to the new schema name.</div>
+            </button>
+
+            <button
+              onClick={() => onChoose('create-new')}
+              className="w-full text-left px-4 py-3 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 transition-colors"
+            >
+              <div className="font-semibold text-slate-900">Create a new schema and keep existing references unchanged</div>
+              <div className="text-xs text-slate-600 mt-1">Saves your edits as a new schema while leaving current references on the original schema.</div>
+            </button>
+          </div>
+        </div>
+
+        <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex justify-end rounded-b-xl">
+          <button onClick={onCancel} className="px-4 py-2 text-slate-700 hover:bg-slate-200 rounded-lg font-medium transition-colors">
+            Cancel
           </button>
         </div>
       </div>
@@ -189,6 +268,12 @@ export function SchemasPanel({
   const [deleteName, setDeleteName] = useState<string | null>(null)
   const [infoMessage, setInfoMessage] = useState<string | null>(null)
   const [expandedSchemas, setExpandedSchemas] = useState<Set<string>>(new Set())
+  const [renameStrategyPromptOpen, setRenameStrategyPromptOpen] = useState(false)
+
+  const schemaUsageForEditor = useMemo<SchemaUsageOperation[]>(() => {
+    if (!editor.open || editor.mode !== 'edit' || !editor.originalName) return []
+    return collectSchemaUsageOperations(specification, editor.originalName)
+  }, [specification, editor.open, editor.mode, editor.originalName])
 
   useEffect(() => {
     if (!selectedSchemaName) return
@@ -242,12 +327,13 @@ export function SchemasPanel({
 
   const closeEditor = () => {
     setEditor((prev) => ({ ...prev, open: false, error: null }))
+    setRenameStrategyPromptOpen(false)
     if (mode === 'modal-only') {
       onSelectedSchemaChange?.(null)
     }
   }
 
-  const saveSchema = () => {
+  const commitSchemaSave = (strategyForRename?: RenameStrategy) => {
     if (!onUpdateSpecification) return
 
     const trimmedName = editor.name.trim()
@@ -258,6 +344,11 @@ export function SchemasPanel({
 
     if (!isValidSchemaName(trimmedName)) {
       setEditor((prev) => ({ ...prev, error: 'Schema name must contain only letters, numbers, hyphens, and underscores.' }))
+      return
+    }
+
+    if (editor.mode === 'edit' && editor.originalName !== trimmedName && !strategyForRename) {
+      setRenameStrategyPromptOpen(true)
       return
     }
 
@@ -272,33 +363,30 @@ export function SchemasPanel({
 
     const nextSchema = buildObjectSchemaFromProperties(editor.body.properties)
     let updatedRefCount = 0
+    const shouldRenameRefs = editor.mode === 'edit' && editor.originalName !== trimmedName && strategyForRename === 'rename-all'
+    const shouldCreateNewOnRename =
+      editor.mode === 'edit' && editor.originalName !== trimmedName && strategyForRename === 'create-new'
 
     onUpdateSpecification((spec) => {
-      const requestBodyRenameResult =
-        editor.mode === 'edit' && editor.originalName !== trimmedName
-          ? renameSchemaRefsInRequestBodies(spec, editor.originalName, trimmedName)
-          : { content: JSON.parse(JSON.stringify(spec.content)), updatedCount: 0 }
+      const renameResult = shouldRenameRefs
+        ? renameSchemaRefsEverywhere(spec, editor.originalName, trimmedName)
+        : { content: JSON.parse(JSON.stringify(spec.content)), updatedCount: 0 }
 
-      const responsesRenameResult =
-        editor.mode === 'edit' && editor.originalName !== trimmedName
-          ? renameSchemaRefsInResponses(
-              { ...spec, content: requestBodyRenameResult.content },
-              editor.originalName,
-              trimmedName,
-            )
-          : { content: requestBodyRenameResult.content, updatedCount: 0 }
+      updatedRefCount = renameResult.updatedCount
 
-      updatedRefCount = requestBodyRenameResult.updatedCount + responsesRenameResult.updatedCount
-
-      const updatedContent = responsesRenameResult.content as Record<string, any>
+      const updatedContent = renameResult.content as Record<string, any>
       const updatedComponents = (updatedContent.components as Record<string, any>) || {}
       const updatedSchemas = { ...(updatedComponents.schemas as Record<string, unknown>) || {} }
 
-      if (editor.mode === 'edit' && editor.originalName !== trimmedName) {
+      if (shouldRenameRefs) {
         delete updatedSchemas[editor.originalName]
       }
 
       updatedSchemas[trimmedName] = nextSchema
+
+      if (editor.mode === 'edit' && editor.originalName === trimmedName) {
+        updatedSchemas[editor.originalName] = nextSchema
+      }
 
       return {
         ...spec,
@@ -313,13 +401,20 @@ export function SchemasPanel({
       }
     })
 
-    setInfoMessage(
-      editor.mode === 'edit' && editor.originalName !== trimmedName
-        ? `Schema renamed. Updated ${updatedRefCount} $ref occurrence(s) across request bodies and responses.`
-        : 'Schema saved successfully.',
-    )
+    if (shouldRenameRefs) {
+      setInfoMessage(`Schema renamed. Updated ${updatedRefCount} $ref occurrence(s) across direct and nested usages.`)
+    } else if (shouldCreateNewOnRename) {
+      setInfoMessage(`New schema "${trimmedName}" created. Existing references still point to "${editor.originalName}".`)
+    } else {
+      setInfoMessage('Schema saved successfully.')
+    }
 
+    setRenameStrategyPromptOpen(false)
     closeEditor()
+  }
+
+  const saveSchema = () => {
+    commitSchemaSave()
   }
 
   const confirmDelete = () => {
@@ -365,9 +460,18 @@ export function SchemasPanel({
           state={editor}
           existingNames={sortStringsCaseInsensitiveStable(Object.keys(schemas))}
           schemas={schemas}
+          usedIn={schemaUsageForEditor}
           onClose={closeEditor}
           onChange={setEditor}
           onSave={saveSchema}
+        />
+
+        <RenameStrategyModal
+          open={renameStrategyPromptOpen}
+          originalName={editor.originalName}
+          newName={editor.name.trim()}
+          onChoose={(strategy) => commitSchemaSave(strategy)}
+          onCancel={() => setRenameStrategyPromptOpen(false)}
         />
 
         {deleteName && (
@@ -504,9 +608,18 @@ export function SchemasPanel({
           state={editor}
           existingNames={sortStringsCaseInsensitiveStable(Object.keys(schemas))}
           schemas={schemas}
+          usedIn={schemaUsageForEditor}
           onClose={closeEditor}
           onChange={setEditor}
           onSave={saveSchema}
+        />
+
+        <RenameStrategyModal
+          open={renameStrategyPromptOpen}
+          originalName={editor.originalName}
+          newName={editor.name.trim()}
+          onChoose={(strategy) => commitSchemaSave(strategy)}
+          onCancel={() => setRenameStrategyPromptOpen(false)}
         />
 
         {deleteName && (
