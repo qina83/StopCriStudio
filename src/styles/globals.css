@@ -1,0 +1,137 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-app-bg: #eef3f7;
+  --color-app-bg-accent: #dce8f3;
+  --color-surface-base: #ffffff;
+  --color-surface-subtle: #f4f7fa;
+  --color-surface-raised: #fbfdff;
+  --color-surface-inverse: #10233a;
+  --color-border-default: #d8e0e8;
+  --color-border-strong: #b7c5d2;
+  --color-border-inverse: rgba(255, 255, 255, 0.18);
+  --color-text-primary: #10233a;
+  --color-text-secondary: #40546a;
+  --color-text-muted: #6d8195;
+  --color-text-inverse: #f8fbff;
+  --color-action-primary: #0f6db6;
+  --color-action-primary-hover: #0b5c99;
+  --color-action-secondary: #d7e3ef;
+  --color-action-secondary-hover: #c5d7e7;
+  --color-action-danger: #c73d38;
+  --color-action-danger-hover: #a9302d;
+  --color-state-success: #166a48;
+  --color-state-success-bg: #e5f5ec;
+  --color-state-warning: #9a5a04;
+  --color-state-warning-bg: #fff3dd;
+  --color-state-error: #9d2f2f;
+  --color-state-error-bg: #fdeaea;
+  --color-state-info: #155e9a;
+  --color-state-info-bg: #e7f2fb;
+  --color-focus-ring: #1681d8;
+  --color-sidebar-bg: #0f2032;
+  --color-sidebar-surface: #14283d;
+  --color-sidebar-border: #23384f;
+  --color-sidebar-text: #f4f8fc;
+  --color-sidebar-text-muted: #91a7bd;
+  --radius-sm: 0.5rem;
+  --radius-md: 0.8rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.4rem;
+  --shadow-panel: 0 10px 28px rgba(16, 35, 58, 0.08);
+  --shadow-raised: 0 20px 48px rgba(16, 35, 58, 0.12);
+  --shadow-modal: 0 28px 80px rgba(5, 18, 31, 0.32);
+  --space-panel-x: 1.5rem;
+  --space-panel-y: 1.5rem;
+  --space-section-gap: 2rem;
+  --space-control-gap: 0.875rem;
+}
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Avenir Next', 'Segoe UI', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background:
+      radial-gradient(circle at top left, rgba(173, 212, 242, 0.42), transparent 30%),
+      linear-gradient(180deg, var(--color-app-bg) 0%, #edf2f7 100%);
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+@layer base {
+  body {
+    @apply bg-app-bg text-text-primary;
+  }
+
+  ::selection {
+    background: rgba(21, 94, 154, 0.18);
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    @apply transition-colors duration-150;
+  }
+
+  *:focus-visible {
+    @apply outline-none ring-2 ring-focus-ring ring-offset-2 ring-offset-app-bg;
+  }
+}
+
+@layer components {
+  .ui-panel {
+    @apply rounded-xl border border-border-default bg-surface-base shadow-panel;
+  }
+
+  .ui-panel-subtle {
+    @apply rounded-xl border border-border-default bg-surface-subtle;
+  }
+
+  .ui-panel-raised {
+    @apply rounded-xl border border-border-default bg-surface-raised shadow-raised;
+  }
+
+  .ui-input {
+    @apply w-full rounded-md border border-border-default bg-surface-base px-3.5 py-2.5 text-sm text-text-primary shadow-sm placeholder:text-text-muted focus:border-focus-ring focus:ring-2 focus:ring-focus-ring disabled:cursor-not-allowed disabled:bg-surface-subtle disabled:text-text-muted;
+  }
+
+  .ui-textarea {
+    @apply ui-input min-h-[96px] resize-y;
+  }
+
+  .ui-select {
+    @apply ui-input appearance-none pr-10;
+  }
+
+  .ui-card-interactive {
+    @apply ui-panel-raised hover:-translate-y-0.5 hover:border-border-strong hover:shadow-raised;
+  }
+
+  .ui-status-banner {
+    @apply flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium;
+  }
+
+  .ui-divider {
+    @apply border-t border-border-default;
+  }
+
+  .ui-technical {
+    @apply font-mono text-sm text-text-primary;
+  }
+}
