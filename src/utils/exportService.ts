@@ -53,6 +53,37 @@ function transformForExport(content: Record<string, any>): Record<string, any> {
         if (pathObj[method]) {
           const operation = pathObj[method]
 
+          // Italian Guidelines (operation-operationId): ensure operationId is present
+          if (typeof operation.operationId !== 'string' || operation.operationId.trim() === '') {
+            operation.operationId = generateOperationId(method, pathName)
+          }
+
+          // Normalize summary/description: trim, drop empty values
+          if (typeof operation.description === 'string') {
+            const trimmed = operation.description.trim()
+            if (trimmed) {
+              operation.description = trimmed
+            } else {
+              delete operation.description
+            }
+          }
+          if (typeof operation.summary === 'string') {
+            const trimmed = operation.summary.trim()
+            if (trimmed) {
+              operation.summary = trimmed
+            } else {
+              delete operation.summary
+            }
+          }
+
+          // Italian Guidelines (operation-tag-defined): ensure tags is a non-empty array
+          const rawTags = Array.isArray(operation.tags) ? operation.tags : []
+          const cleanedTags = rawTags
+            .filter((t: unknown) => typeof t === 'string')
+            .map((t: string) => t.trim())
+            .filter((t: string) => t.length > 0)
+          operation.tags = cleanedTags.length > 0 ? cleanedTags : ['non-empty']
+
           // WP-046: Ensure each operation exports a valid responses object
           const responses = operation.responses
           if (!responses || typeof responses !== 'object' || Array.isArray(responses) || Object.keys(responses).length === 0) {
@@ -122,6 +153,44 @@ function transformForExport(content: Record<string, any>): Record<string, any> {
   }
 
   return transformed
+}
+
+// ─── operationId generation (Italian Guidelines) ─────────────────────────────
+
+/**
+ * Generate a deterministic operationId from HTTP method and path.
+ * Examples:
+ *  - GET  /users              → getUsers
+ *  - GET  /users/{id}         → getUsersById
+ *  - POST /users/{id}/orders  → postUsersByIdOrders
+ *  - GET  /                   → getRoot
+ */
+function generateOperationId(method: string, pathName: string): string {
+  const segments = pathName
+    .split('/')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+
+  const parts = segments.map((seg) => {
+    const paramMatch = seg.match(/^\{(.+)\}$/)
+    if (paramMatch) {
+      return 'By' + capitalize(sanitizeIdentifier(paramMatch[1]))
+    }
+    return capitalize(sanitizeIdentifier(seg))
+  })
+
+  const suffix = parts.join('') || 'Root'
+  return method.toLowerCase() + suffix
+}
+
+function sanitizeIdentifier(input: string): string {
+  const cleaned = input.replace(/[^A-Za-z0-9]+(.)/g, (_m, c: string) => c.toUpperCase())
+  return cleaned.replace(/[^A-Za-z0-9]/g, '')
+}
+
+function capitalize(input: string): string {
+  if (!input) return ''
+  return input.charAt(0).toUpperCase() + input.slice(1)
 }
 
 // ─── Security schemes → OpenAPI (WP-032) ─────────────────────────────────────

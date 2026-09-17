@@ -18,7 +18,7 @@ import { QueryParametersPanel } from '../QueryParameters/QueryParametersPanel'
 import { RequestBodyPanel } from '../RequestBody/RequestBodyPanel'
 import { SecurityPanel } from '../Security/SecurityPanel'
 import { ResponsesPanel } from '../Responses/ResponsesPanel'
-import { AppButton, AppIconButton, Badge, CheckIcon, CloseIcon, ConfirmDialog, EditIcon, getMethodBadgeClass, TrashIcon } from '../ui'
+import { AppButton, AppIconButton, Badge, CheckIcon, CloseIcon, ConfirmDialog, EditIcon, getMethodBadgeClass, TextArea, TrashIcon } from '../ui'
 
 const HTTP_METHODS: HTTPMethod[] = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'HEAD', 'OPTIONS']
 const PARAMETER_TYPES: ParameterType[] = ['string', 'number', 'integer', 'boolean']
@@ -61,6 +61,7 @@ interface PathEditFormProps {
     security: OperationSecurityRequirement[],
     schemes: Record<string, SecurityScheme>,
   ) => void
+  onOperationDescriptionChange?: (method: HTTPMethod, description: string) => void
   onOpenSchemaRef?: (schemaName: string) => void
 }
 
@@ -88,6 +89,7 @@ export function PathEditForm({
   getSecuritySchemes,
   getOtherOperationsSchemeNames,
   onOperationSecurityChange,
+  onOperationDescriptionChange,
   onOpenSchemaRef,
 }: PathEditFormProps) {
   const [selectedOperation, setSelectedOperation] = useState<HTTPMethod | null>(null)
@@ -479,11 +481,35 @@ export function PathEditForm({
               </div>
             )}
 
-            {operations[selectedOperation]?.description && (
+            {onOperationDescriptionChange ? (
               <div>
-                <p className="text-sm font-medium text-text-secondary">Description</p>
-                <p className="text-text-primary">{operations[selectedOperation]?.description}</p>
+                <label
+                  htmlFor={`operation-description-${selectedOperation}`}
+                  className="mb-1 block text-sm font-medium text-text-secondary"
+                >
+                  Description
+                </label>
+                <TextArea
+                  id={`operation-description-${selectedOperation}`}
+                  value={operations[selectedOperation]?.description ?? ''}
+                  onChange={(e) =>
+                    onOperationDescriptionChange(selectedOperation, e.target.value)
+                  }
+                  placeholder="Describe what this operation does, expected behavior, side effects, etc."
+                  rows={4}
+                  className="w-full"
+                />
+                <p className="mt-1 text-xs text-text-muted">
+                  Included in the exported OpenAPI spec as <code>description</code>.
+                </p>
               </div>
+            ) : (
+              operations[selectedOperation]?.description && (
+                <div>
+                  <p className="text-sm font-medium text-text-secondary">Description</p>
+                  <p className="text-text-primary">{operations[selectedOperation]?.description}</p>
+                </div>
+              )
             )}
           </div>
 

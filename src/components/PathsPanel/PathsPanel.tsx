@@ -680,6 +680,35 @@ export function PathsPanel({
     })
   }
 
+  // Operation metadata (summary/description) handlers
+  const handleOperationDescriptionChange = (method: HTTPMethod, description: string) => {
+    if (!selectedPath) return
+    const updateFn = onUpdateSpecificationAndSave || onUpdateSpecification
+    if (!updateFn) return
+    updateFn((spec) => {
+      const paths = (spec.content.paths as Record<string, any>) || {}
+      const pathObj = paths[selectedPath] || {}
+      const operation = pathObj[method.toLowerCase()] || {}
+      return {
+        ...spec,
+        content: {
+          ...spec.content,
+          paths: {
+            ...paths,
+            [selectedPath]: {
+              ...pathObj,
+              [method.toLowerCase()]: {
+                ...operation,
+                description,
+              },
+            },
+          },
+        },
+        updatedAt: Date.now(),
+      }
+    })
+  }
+
   return (
     <PanelShell
       title={selectedPath ? 'Edit Path' : 'API Paths'}
@@ -712,6 +741,7 @@ export function PathsPanel({
           getSecuritySchemes={getSecuritySchemes}
           getOtherOperationsSchemeNames={getOtherOperationsSchemeNames}
           onOperationSecurityChange={handleOperationSecurityChange}
+          onOperationDescriptionChange={handleOperationDescriptionChange}
           onOpenSchemaRef={onOpenSchemaRef}
         />
       ) : (
