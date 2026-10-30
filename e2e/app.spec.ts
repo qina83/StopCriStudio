@@ -1,4 +1,6 @@
-import { expect, test } from '@playwright/test'
+import { expect, Page, test } from '@playwright/test'
+import { resetAppState } from './helpers/editor'
+import { exportSpecification, importSpecification } from './helpers/specification'
 
 const STORAGE_KEY = 'stopCriStudio_specifications'
 const SPEC_NAME = 'QA Studio API'
@@ -16,17 +18,10 @@ components:
 `
 
 test.beforeEach(async ({ page }) => {
-  await page.goto('/')
-  await page.evaluate((storageKey) => {
-    localStorage.removeItem(storageKey)
-    Object.keys(localStorage)
-      .filter((key) => key.startsWith(`${storageKey}_`))
-      .forEach((key) => localStorage.removeItem(key))
-  }, STORAGE_KEY)
-  await page.reload()
+  await resetAppState(page)
 })
 
-async function openSavedSpecificationCard(page: Parameters<typeof test>[0]['page'], name: string) {
+async function openSavedSpecificationCard(page: Page, name: string) {
   await page.getByRole('button', { name: 'Load a previously saved specification' }).click()
   const card = page.locator('button').filter({ has: page.getByRole('heading', { name, exact: true }) }).first()
   await expect(card).toBeVisible()
@@ -41,6 +36,32 @@ test('shows the welcome screen entry points', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Load an existing OpenAPI specification file' })).toBeVisible()
   await expect(page.getByText('Offline OpenAPI Workspace')).toBeVisible()
 })
+
+for (const example of [
+  { name: 'malformed YAML', content: 'info: [', field: 'file:' },
+  { name: 'null root', content: 'null', field: 'root: Specification must be an object' },
+  { name: 'unsupported version', content: JSON.stringify({ openapi: '2.0.0', info: { title: 'Invalid', version: '1' }, paths: {} }), field: 'openapi: OpenAPI version "2.0.0" is not supported.' },
+  { name: 'missing title', content: JSON.stringify({ openapi: '3.0.0', info: { version: '1' }, paths: {} }), field: 'info.title:' },
+  { name: 'missing version', content: JSON.stringify({ openapi: '3.0.0', info: { title: 'Invalid' }, paths: {} }), field: 'info.version:' },
+  { name: 'missing paths', content: JSON.stringify({ openapi: '3.0.0', info: { title: 'Invalid', version: '1' } }), field: 'paths:' },
+]) {
+  test(`rejects ${example.name} on import and recovers with a valid file (WP-007)`, async ({ page }) => {
+    await page.locator('input[type="file"]').setInputFiles({
+      name: 'invalid.yaml', mimeType: 'application/x-yaml', buffer: Buffer.from(example.content),
+    })
+    const modal = page.locator('.fixed.inset-0').last()
+    await expect(modal.getByRole('heading', { name: 'Invalid OpenAPI Specification' })).toBeVisible()
+    await expect(modal.getByText(example.field, { exact: false })).toBeVisible()
+    expect(await page.evaluate(() => localStorage.getItem('stopCriStudio_specifications'))).toBeNull()
+    await modal.getByRole('button', { name: 'Close', exact: true }).last().click()
+    await importSpecification(page, {
+      openapi: '3.0.0', info: { title: 'Recovered API', version: '1.0.0' }, paths: {},
+    })
+    expect(await exportSpecification(page)).toMatchObject({
+      openapi: '3.0.0', info: { title: 'Recovered API', version: '1.0.0' }, paths: {},
+    })
+  })
+}
 
 test('creates, autosaves, reloads, and deletes a saved specification', async ({ page }) => {
   await page.getByRole('button', { name: 'Create a new OpenAPI specification' }).click()
